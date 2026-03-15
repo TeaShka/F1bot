@@ -25,6 +25,9 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="⚙️ Настройки времени", callback_data="settings"),
     )
+    builder.row(
+    InlineKeyboardButton(text="🏎 Пилоты 2026", callback_data="drivers_list"),
+    )
     return builder.as_markup()
 
 
@@ -38,16 +41,27 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
 def calendar_kb(rounds: list[dict]) -> InlineKeyboardMarkup:
     """
     Клавиатура для листания этапов календаря.
-    Каждая кнопка — отдельный этап.
+    Завершённые гонки отмечаются ✅.
     """
+    from datetime import datetime, timezone
+    now = datetime.now(tz=timezone.utc)
+
     builder = InlineKeyboardBuilder()
     for race in rounds:
-        label = f"{race['flag']} Эт.{race['round']} {race['name']}"
+        race_utc = race["sessions"]["race"].replace(tzinfo=timezone.utc)
+        finished = now > race_utc
+        if finished:
+            # Telegram не поддерживает HTML в тексте кнопок,
+            # поэтому используем эмодзи-зачёркивание через спецсимволы
+            name = race["name"].replace("Гран-при ", "")
+            label = f"✅ {name}"
+        else:
+            label = f"{race['flag']} Эт.{race['round']} {race['name']}"
         builder.button(
             text=label,
             callback_data=f"race_{race['round']}"
         )
-    builder.adjust(1)  # по одной кнопке в строку
+    builder.adjust(1)
     builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
     return builder.as_markup()
 
@@ -125,4 +139,5 @@ def standings_menu_kb() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="◀️ В главное меню",  callback_data="main_menu"),
     )
+    
     return builder.as_markup()
