@@ -96,10 +96,8 @@ async def _broadcast(
         time_str = format_dt(session_dt, tz)
 
         text = (
-            f"⏰ <b>Через 1 час!</b>\n\n"
-            f"{race['flag']} <b>{race['name']}</b>\n"
-            f"{session_label}\n"
-            f"📆 {time_str}"
+            f"⏰ <b>Через 1 час</b> — {race['name']}\n"
+            f"{session_label} · {time_str}"
         )
         try:
             await bot.send_message(user_id, text, parse_mode="HTML")

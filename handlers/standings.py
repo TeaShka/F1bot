@@ -119,11 +119,11 @@ def format_driver_standings(standings: list[dict], after_round: int) -> str:
     for d in standings:
         pos = d["position"]
         medal = MEDALS.get(pos, f"{pos}.")
-        flag = NATIONALITY_FLAGS.get(d["nationality"], "🏳️")
+        flag = NATIONALITY_FLAGS.get(d["nationality"], "")
         wins = f" ({d['wins']} побед)" if int(d["wins"]) > 0 else ""
         lines.append(
-            f"{medal} {flag} <b>{d['name']}</b>\n"
-            f"    {d['points']} очков{wins} — {d['team']}"
+            f"{medal} {flag} <b>{d['name']}</b> — {d['points']} оч.{wins}\n"
+            f"    {d['team']}"
         )
 
     return "\n".join(lines)
@@ -139,28 +139,12 @@ def format_constructor_standings(standings: list[dict], after_round: int) -> str
         f"<i>После этапа {after_round}</i>\n",
     ]
 
-    team_icons = {
-        "McLaren":       "🟠",
-        "Ferrari":       "🔴",
-        "Red Bull":      "🔵",
-        "Mercedes":      "⚫",
-        "Aston Martin":  "🟢",
-        "Alpine":        "💙",
-        "Williams":      "🔷",
-        "Racing Bulls":  "🟤",
-        "Haas":          "⬜",
-        "Audi":          "⚪",
-        "Cadillac":      "🇺🇸",
-    }
-
     for c in standings:
         pos = c["position"]
         medal = MEDALS.get(pos, f"{pos}.")
-        icon = next((v for k, v in team_icons.items() if k in c["name"]), "🏎")
         wins = f" ({c['wins']} побед)" if int(c["wins"]) > 0 else ""
         lines.append(
-            f"{medal} {icon} <b>{c['name']}</b>\n"
-            f"    {c['points']} очков{wins}"
+            f"{medal} <b>{c['name']}</b> — {c['points']} очков{wins}"
         )
 
     return "\n".join(lines)
