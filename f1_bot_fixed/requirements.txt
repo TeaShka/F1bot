@@ -1,0 +1,11 @@
+# Telegram-бот
+aiogram==3.13.1
+
+# Переменные окружения
+python-dotenv==1.0.1
+
+# Определение часового пояса по GPS-координатам
+timezonefinder==6.5.2
+
+# tzdata нужен для zoneinfo на Windows и в некоторых Docker-образах
+tzdata==2024.2
