@@ -9,3 +9,5 @@ timezonefinder==6.5.2
 
 # tzdata нужен для zoneinfo на Windows и в некоторых Docker-образах
 tzdata==2024.2
+
+aiohttp==3.9.5

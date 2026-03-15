@@ -20,6 +20,9 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📅 Календарь 2026",   callback_data="calendar"),
     )
     builder.row(
+        InlineKeyboardButton(text="🏆 Таблица очков",    callback_data="standings_menu"),
+    )
+    builder.row(
         InlineKeyboardButton(text="⚙️ Настройки времени", callback_data="settings"),
     )
     return builder.as_markup()
@@ -108,3 +111,18 @@ def share_location_kb() -> ReplyKeyboardMarkup:
 def remove_kb() -> ReplyKeyboardRemove:
     """Убирает Reply-клавиатуру."""
     return ReplyKeyboardRemove()
+
+
+def standings_menu_kb() -> InlineKeyboardMarkup:
+    """Меню выбора таблицы очков."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="👤 Личный зачёт",   callback_data="driver_standings"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="🏗 Конструкторы",    callback_data="constructor_standings"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ В главное меню",  callback_data="main_menu"),
+    )
+    return builder.as_markup()

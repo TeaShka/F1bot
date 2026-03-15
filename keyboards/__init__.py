@@ -1,4 +1,5 @@
 from .keyboards import (
+    standings_menu_kb,
     main_menu_kb,
     back_to_menu_kb,
     calendar_kb,
@@ -9,6 +10,7 @@ from .keyboards import (
 )
 
 __all__ = [
+    "standings_menu_kb",
     "main_menu_kb",
     "back_to_menu_kb",
     "calendar_kb",

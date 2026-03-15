@@ -58,38 +58,6 @@ SCHEDULE_2026: list[dict] = [
     },
     {
         "round": 4,
-        "name": "Гран-при Бахрейна",
-        "circuit": "Бахрейнский международный автодром",
-        "country": "Бахрейн",
-        "flag": "🇧🇭",
-        "sessions": {
-            "fp1":               datetime(2026, 4, 10, 10, 30),
-            "fp2":               datetime(2026, 4, 10, 14, 0),
-            "fp3":               datetime(2026, 4, 11, 9, 30),
-            "sprint_qualifying": None,
-            "sprint":            None,
-            "qualifying":        datetime(2026, 4, 11, 13, 0),
-            "race":              datetime(2026, 4, 12, 15, 0),
-        },
-    },
-    {
-        "round": 5,
-        "name": "Гран-при Саудовской Аравии",
-        "circuit": "Джидда Корниш",
-        "country": "Саудовская Аравия",
-        "flag": "🇸🇦",
-        "sessions": {
-            "fp1":               datetime(2026, 4, 17, 11, 30),
-            "fp2":               datetime(2026, 4, 17, 15, 0),
-            "fp3":               datetime(2026, 4, 18, 10, 30),
-            "sprint_qualifying": None,
-            "sprint":            None,
-            "qualifying":        datetime(2026, 4, 18, 14, 0),
-            "race":              datetime(2026, 4, 19, 17, 0),
-        },
-    },
-    {
-        "round": 6,
         "name": "Гран-при Майами",
         "circuit": "Майами Интернэшнл Отодром",
         "country": "США",
@@ -105,7 +73,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 7,
+        "round": 5,
         "name": "Гран-при Канады",
         "circuit": "Жиль Вильнёв",
         "country": "Канада",
@@ -121,7 +89,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 8,
+        "round": 6,
         "name": "Гран-при Монако",
         "circuit": "Трасса Монако",
         "country": "Монако",
@@ -137,7 +105,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 9,
+        "round": 7,
         "name": "Гран-при Барселоны-Каталунья",
         "circuit": "Каталунья",
         "country": "Испания",
@@ -153,7 +121,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 10,
+        "round": 8,
         "name": "Гран-при Австрии",
         "circuit": "Ред Булл Ринг",
         "country": "Австрия",
@@ -169,7 +137,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 11,
+        "round": 9,
         "name": "Гран-при Великобритании",
         "circuit": "Сильверстоун",
         "country": "Великобритания",
@@ -185,7 +153,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 12,
+        "round": 10,
         "name": "Гран-при Бельгии",
         "circuit": "Спа-Франкоршам",
         "country": "Бельгия",
@@ -201,7 +169,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 13,
+        "round": 11,
         "name": "Гран-при Венгрии",
         "circuit": "Хунгароринг",
         "country": "Венгрия",
@@ -217,7 +185,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 14,
+        "round": 12,
         "name": "Гран-при Нидерландов",
         "circuit": "Зандворт",
         "country": "Нидерланды",
@@ -233,7 +201,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 15,
+        "round": 13,
         "name": "Гран-при Италии",
         "circuit": "Монца",
         "country": "Италия",
@@ -249,7 +217,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 16,
+        "round": 14,
         "name": "Гран-при Испании (Мадрид)",
         "circuit": "Мадрид Мотор Сити",
         "country": "Испания",
@@ -265,7 +233,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 17,
+        "round": 15,
         "name": "Гран-при Азербайджана",
         "circuit": "Городская трасса Баку",
         "country": "Азербайджан",
@@ -281,7 +249,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 18,
+        "round": 16,
         "name": "Гран-при Сингапура",
         "circuit": "Марина Бэй",
         "country": "Сингапур",
@@ -297,7 +265,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 19,
+        "round": 17,
         "name": "Гран-при США",
         "circuit": "Сёркит оф зе Америкас, Остин",
         "country": "США",
@@ -313,7 +281,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 20,
+        "round": 18,
         "name": "Гран-при Мексики",
         "circuit": "Аутодромо Эрманос Родригес",
         "country": "Мексика",
@@ -329,7 +297,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 21,
+        "round": 19,
         "name": "Гран-при Бразилии",
         "circuit": "Интерлагос",
         "country": "Бразилия",
@@ -345,7 +313,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 22,
+        "round": 20,
         "name": "Гран-при Лас-Вегаса",
         "circuit": "Лас-Вегас Стрип Сёркит",
         "country": "США",
@@ -361,7 +329,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 23,
+        "round": 21,
         "name": "Гран-при Катара",
         "circuit": "Лусаил Интернэшнл Сёркит",
         "country": "Катар",
@@ -377,7 +345,7 @@ SCHEDULE_2026: list[dict] = [
         },
     },
     {
-        "round": 24,
+        "round": 22,
         "name": "Гран-при Абу-Даби",
         "circuit": "Яс Марина",
         "country": "ОАЭ",
