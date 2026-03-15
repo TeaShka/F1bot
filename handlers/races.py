@@ -9,9 +9,9 @@ import logging
 from aiogram import Router
 from aiogram.types import CallbackQuery
 
-from config.schedule import SCHEDULE_2026, SESSION_NAMES
+from bot_config.schedule import SCHEDULE_2026, SESSION_NAMES
 from database import Database
-from keyboards.keyboards import back_to_menu_kb, calendar_kb
+from keyboards import back_to_menu_kb, calendar_kb
 from utils import get_next_race, format_dt
 
 logger = logging.getLogger(__name__)

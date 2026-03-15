@@ -8,7 +8,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 
 from database import Database
-from keyboards.keyboards import main_menu_kb
+from keyboards import main_menu_kb
 
 logger = logging.getLogger(__name__)
 
