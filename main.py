@@ -64,6 +64,7 @@ async def main() -> None:
 
     # Создаём бота с HTML-парсингом по умолчанию
     bot = Bot(
+        token=config.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
