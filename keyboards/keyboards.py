@@ -66,7 +66,7 @@ def calendar_kb(rounds: list[dict]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def settings_kb(notify_qual: bool, notify_race: bool) -> InlineKeyboardMarkup:
+def settings_kb(notify_qual: bool, notify_race: bool, notify_time: int = 60) -> InlineKeyboardMarkup:
     """Клавиатура настроек: смена часового пояса и уведомления."""
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -77,6 +77,8 @@ def settings_kb(notify_qual: bool, notify_race: bool) -> InlineKeyboardMarkup:
     # Кнопки уведомлений с отображением текущего состояния
     qual_icon = "✅" if notify_qual else "❌"
     race_icon = "✅" if notify_race else "❌"
+    time_label = "1 час" if notify_time == 60 else "15 мин"
+
     builder.row(
         InlineKeyboardButton(
             text=f"{qual_icon} Уведомление: квалификация",
@@ -89,6 +91,15 @@ def settings_kb(notify_qual: bool, notify_race: bool) -> InlineKeyboardMarkup:
             callback_data="toggle_notify_race"
         )
     )
+    
+    # Кнопка переключения времени
+    builder.row(
+        InlineKeyboardButton(
+            text=f"⏰ Напомнить за: {time_label}",
+            callback_data="toggle_notify_time"
+        )
+    )
+    
     builder.row(
         InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu")
     )

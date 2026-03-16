@@ -49,146 +49,136 @@ class SettingsStates(StatesGroup):
 
 @router.callback_query(lambda c: c.data == "settings")
 async def cb_settings(callback: CallbackQuery, db: Database) -> None:
-    """Открывает страницу настроек."""
+    """Открывает главное меню настроек."""
     user_id = callback.from_user.id
     tz = db.get_user_timezone(user_id)
     notif = db.get_notification_settings(user_id)
+    n_time = notif.get("notify_time", 60)
 
     text = (
         "⚙️ <b>Настройки</b>\n\n"
         f"🌍 Часовой пояс: <code>{tz}</code>\n\n"
-        "🔔 Уведомления (за 1 час до старта):\n"
+        f"🔔 Уведомления (за {n_time} мин до старта):\n"
         f"  • Квалификация: {'✅ вкл.' if notif['notify_qual'] else '❌ выкл.'}\n"
         f"  • Гонка:        {'✅ вкл.' if notif['notify_race'] else '❌ выкл.'}"
     )
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"]),
-    )
+    
+    kb = settings_kb(notif["notify_qual"], notif["notify_race"], n_time)
+    
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        
     await callback.answer()
 
 
-# ── Выбор часового пояса ──────────────────────────────────────────────────────
+# ── Настройка часового пояса ──────────────────────────────────────────────────
 
 @router.callback_query(lambda c: c.data == "change_tz")
 async def cb_change_tz(callback: CallbackQuery) -> None:
-    """Предлагает выбрать часовой пояс из списка или указать вручную."""
+    """Переход к выбору часового пояса."""
     text = (
         "🌍 <b>Выбор часового пояса</b>\n\n"
-        "Выберите свой регион или введите IANA-идентификатор вручную.\n"
-        "Например: <code>Europe/Moscow</code>, <code>Asia/Almaty</code>"
+        "Выбери из популярных или нажми «Ввести вручную».\n"
+        "Также можешь отправить свою геолокацию (через скрепку), "
+        "и бот определит пояс автоматически."
     )
     await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=timezone_kb(),
+        text, parse_mode="HTML", reply_markup=timezone_kb()
     )
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("tz_") and not c.data == "tz_manual")
-async def cb_tz_selected(callback: CallbackQuery, db: Database) -> None:
-    """Сохраняет выбранный из списка часовой пояс."""
-    tz = callback.data[3:]  # убираем префикс 'tz_'
-
-    if not is_valid_timezone(tz):
-        await callback.answer("❌ Неверный часовой пояс", show_alert=True)
-        return
-
-    user_id = callback.from_user.id
-    db.set_user_timezone(user_id, tz)
-
-    notif = db.get_notification_settings(user_id)
-    await callback.message.edit_text(
-        f"✅ Часовой пояс установлен: <code>{tz}</code>",
-        parse_mode="HTML",
-        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"]),
-    )
-    await callback.answer(f"Часовой пояс: {tz}")
+@router.callback_query(lambda c: c.data.startswith("tz_") and c.data != "tz_manual")
+async def cb_set_popular_tz(callback: CallbackQuery, db: Database) -> None:
+    """Установка одного из популярных часовых поясов."""
+    tz_id = callback.data.replace("tz_", "", 1)
+    db.set_user_timezone(callback.from_user.id, tz_id)
+    await callback.answer(f"Часовой пояс изменён на {tz_id}")
+    await cb_settings(callback, db)
 
 
 @router.callback_query(lambda c: c.data == "tz_manual")
 async def cb_tz_manual(callback: CallbackQuery, state: FSMContext) -> None:
-    """Переходит в режим ручного ввода часового пояса."""
+    """Переход в режим ручного ввода часового пояса."""
     await state.set_state(SettingsStates.waiting_for_tz_input)
-    await callback.message.answer(
-        "✏️ Введите IANA-идентификатор часового пояса.\n"
-        "Например: <code>Europe/Moscow</code> или <code>Asia/Yekaterinburg</code>\n\n"
-        "Полный список: <a href='https://en.wikipedia.org/wiki/List_of_tz_database_time_zones'>"
-        "Wikipedia</a>",
-        parse_mode="HTML",
-        reply_markup=share_location_kb(),
+    text = (
+        "✏️ Введи название часового пояса в формате IANA.\n\n"
+        "<i>Примеры: Europe/Moscow, Asia/Yekaterinburg, America/New_York</i>\n\n"
+        "Либо отправь геолокацию с телефона (по кнопке ниже)."
     )
+    # Удаляем инлайн-кнопки, отправляем новое сообщение с Reply-клавиатурой
+    await callback.message.delete()
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=share_location_kb())
     await callback.answer()
 
 
 @router.message(SettingsStates.waiting_for_tz_input, F.text)
-async def msg_tz_text_input(message: Message, state: FSMContext, db: Database) -> None:
-    """Обрабатывает текстовый ввод часового пояса."""
-    if message.text == "❌ Отмена":
+async def process_manual_tz(message: Message, state: FSMContext, db: Database) -> None:
+    """Обработка ручного ввода текста с поясом."""
+    tz_input = message.text.strip()
+
+    if tz_input == "❌ Отмена":
         await state.clear()
         await message.answer(
-            "Отменено.",
-            reply_markup=remove_kb(),
+            "Ввод отменён. Возвращаемся в настройки.",
+            reply_markup=remove_kb()
         )
+        fake_cb = CallbackQuery(
+            id="fake", from_user=message.from_user, chat_instance="fake",
+            message=await message.answer("Загрузка настроек...")
+        )
+        await cb_settings(fake_cb, db)
         return
 
-    tz = message.text.strip()
-    if not is_valid_timezone(tz):
+    if is_valid_timezone(tz_input):
+        db.set_user_timezone(message.from_user.id, tz_input)
+        await state.clear()
         await message.answer(
-            f"❌ Часовой пояс <code>{tz}</code> не найден.\n"
-            "Проверьте написание и попробуйте снова.",
-            parse_mode="HTML",
+            f"✅ Часовой пояс успешно изменён на <code>{tz_input}</code>",
+            parse_mode="HTML", reply_markup=remove_kb()
         )
-        return
-
-    db.set_user_timezone(message.from_user.id, tz)
-    await state.clear()
-
-    notif = db.get_notification_settings(message.from_user.id)
-    await message.answer(
-        f"✅ Часовой пояс установлен: <code>{tz}</code>",
-        parse_mode="HTML",
-        reply_markup=remove_kb(),
-    )
-    # После снятия Reply-клавиатуры возвращаем меню настроек
-    await message.answer(
-        "⚙️ Вернулись в настройки:",
-        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"]),
-    )
+        fake_cb = CallbackQuery(
+            id="fake", from_user=message.from_user, chat_instance="fake",
+            message=await message.answer("Обновление меню...")
+        )
+        await cb_settings(fake_cb, db)
+    else:
+        await message.answer(
+            "❌ Неверный формат. Попробуй ещё раз или нажми «Отмена».\n"
+            "Пример: <code>Europe/Moscow</code>",
+            parse_mode="HTML"
+        )
 
 
 @router.message(SettingsStates.waiting_for_tz_input, F.location)
-async def msg_location_input(message: Message, state: FSMContext, db: Database) -> None:
-    """Определяет часовой пояс по геолокации пользователя."""
+async def process_location(message: Message, state: FSMContext, db: Database) -> None:
+    """Определение пояса по отправленной геолокации."""
     lat = message.location.latitude
-    lon = message.location.longitude
+    lng = message.location.longitude
 
-    tz = _get_tf().timezone_at(lat=lat, lng=lon)
-    if tz is None:
+    tf = _get_tf()
+    tz_name = tf.timezone_at(lng=lng, lat=lat)
+
+    if tz_name:
+        db.set_user_timezone(message.from_user.id, tz_name)
+        await state.clear()
         await message.answer(
-            "❌ Не удалось определить часовой пояс по вашим координатам.\n"
-            "Попробуйте ввести его вручную.",
-            reply_markup=remove_kb(),
+            f"📍 По координатам определён пояс: <code>{tz_name}</code>\n"
+            "Настройка сохранена.",
+            parse_mode="HTML", reply_markup=remove_kb()
         )
-        return
-
-    db.set_user_timezone(message.from_user.id, tz)
-    await state.clear()
-
-    notif = db.get_notification_settings(message.from_user.id)
-    await message.answer(
-        f"✅ Часовой пояс определён автоматически: <code>{tz}</code>",
-        parse_mode="HTML",
-        reply_markup=remove_kb(),
-    )
-    await message.answer(
-        "⚙️ Вернулись в настройки:",
-        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"]),
-    )
-    logger.info("Пользователь %d: часовой пояс по геолокации = %s",
-                message.from_user.id, tz)
+        fake_cb = CallbackQuery(
+            id="fake", from_user=message.from_user, chat_instance="fake",
+            message=await message.answer("Возврат в настройки...")
+        )
+        await cb_settings(fake_cb, db)
+        logger.info("Пользователь %d: часовой пояс по геолокации = %s",
+                message.from_user.id, tz_name)
+    else:
+        await message.answer("❌ Не удалось определить часовой пояс. Попробуй ввести вручную.")
 
 
 # ── Уведомления ───────────────────────────────────────────────────────────────
@@ -206,6 +196,7 @@ async def cb_toggle_notify(callback: CallbackQuery, db: Database) -> None:
     # Перечитываем актуальные настройки для обновления клавиатуры
     notif = db.get_notification_settings(user_id)
     tz = db.get_user_timezone(user_id)
+    n_time = notif.get("notify_time", 60)
 
     status = "включено ✅" if new_value else "выключено ❌"
     label = "квалификации" if kind == "qual" else "гонки"
@@ -214,12 +205,23 @@ async def cb_toggle_notify(callback: CallbackQuery, db: Database) -> None:
     text = (
         "⚙️ <b>Настройки</b>\n\n"
         f"🌍 Часовой пояс: <code>{tz}</code>\n\n"
-        "🔔 Уведомления (за 1 час до старта):\n"
+        f"🔔 Уведомления (за {n_time} мин до старта):\n"
         f"  • Квалификация: {'✅ вкл.' if notif['notify_qual'] else '❌ выкл.'}\n"
         f"  • Гонка:        {'✅ вкл.' if notif['notify_race'] else '❌ выкл.'}"
     )
     await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"]),
+        text, parse_mode="HTML",
+        reply_markup=settings_kb(notif["notify_qual"], notif["notify_race"], n_time),
     )
+
+
+@router.callback_query(lambda c: c.data == "toggle_notify_time")
+async def cb_toggle_notify_time(callback: CallbackQuery, db: Database) -> None:
+    """Переключает время уведомления между 1 часом и 15 минутами."""
+    user_id = callback.from_user.id
+    current_time = db.get_notify_time(user_id)
+    new_time = 15 if current_time == 60 else 60
+    db.set_notify_time(user_id, new_time)
+    
+    await cb_settings(callback, db)
+    await callback.answer(f"Время изменено на {new_time} минут")

@@ -25,6 +25,21 @@ router = Router(name="races")
 RACE_RESULTS_URL = "https://api.jolpi.ca/ergast/f1/2026/{round}/results.json"
 QUALI_RESULTS_URL = "https://api.jolpi.ca/ergast/f1/2026/{round}/qualifying.json"
 
+# Словарь со схемами трасс (укажи прямые ссылки на картинки или file_id из Telegram)
+TRACK_MAPS = {
+    1: "https://example.com/map_australia.jpg",
+    2: "https://example.com/map_australia.jpg",
+    3: "https://media.formula1.com/image/upload/c_fit,h_704/q_auto/v1740000000/common/f1/2026/track/2026tracksuzukadetailed.webp",
+    4: "https://example.com/map_australia.jpg",
+}
+
+# Ссылки на трансляции (вставь свои реальные ссылки)
+WATCH_LINKS = {
+    "popov": "https://vk.com/gasnutognif1",
+    "stanislavsky": "https://vk.com/stanizlavskylive",
+    "simply": "https://vk.com/simply_plus"
+}
+
 
 def is_race_finished(race: dict) -> bool:
     """Проверяет завершилась ли гонка."""
@@ -94,7 +109,11 @@ async def cb_next_race(callback: CallbackQuery, db: Database) -> None:
 
     if race is None:
         text = "🏁 Сезон 2026 завершён!\n\nСледите за новостями о сезоне 2027 🏎"
-        await callback.message.edit_text(text, reply_markup=back_to_menu_kb())
+        if callback.message.photo:
+            await callback.message.delete()
+            await callback.message.answer(text, reply_markup=back_to_menu_kb())
+        else:
+            await callback.message.edit_text(text, reply_markup=back_to_menu_kb())
         await callback.answer()
         return
 
@@ -106,20 +125,39 @@ async def cb_next_race(callback: CallbackQuery, db: Database) -> None:
         f"Осталось гонок в сезоне: {remaining}\n\n"
     ) + _build_race_detail(race, tz)
 
-    await callback.message.edit_text(
-        text, parse_mode="HTML", reply_markup=back_to_menu_kb()
-    )
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопка "Где смотреть?"
+    builder.row(InlineKeyboardButton(text="📺 Где смотреть?", callback_data=f"watch_{race['round']}"))
+    builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
+    kb = builder.as_markup()
+
+    track_photo = TRACK_MAPS.get(race['round'])
+
+    if track_photo:
+        await callback.message.delete()
+        await callback.message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
+    else:
+        if callback.message.photo:
+            await callback.message.delete()
+            await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
+        else:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data == "calendar")
 async def cb_calendar(callback: CallbackQuery) -> None:
     """Выводит список всех этапов сезона 2026."""
-    text = "📅 <b>Календарь Формулы 1 — Сезон 2026</b>\n\nВыберите этап:"
-    await callback.message.edit_text(
-        text, parse_mode="HTML",
-        reply_markup=calendar_kb(SCHEDULE_2026),
-    )
+    text = "📅 <b>Календарь Формулы 1 - Сезон 2026</b>\n\nВыберите этап:"
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=calendar_kb(SCHEDULE_2026))
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=calendar_kb(SCHEDULE_2026))
     await callback.answer()
 
 
@@ -141,25 +179,65 @@ async def cb_race_detail(callback: CallbackQuery, db: Database) -> None:
     tz = db.get_user_timezone(user_id)
     text = _build_race_detail(race, tz)
 
-    # Если гонка завершена — добавляем кнопку "Информация о гонке"
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton
+    builder = InlineKeyboardBuilder()
+
+    # Кнопка "Где смотреть?"
+    builder.row(InlineKeyboardButton(text="📺 Где смотреть?", callback_data=f"watch_{round_num}"))
+
     if is_race_finished(race):
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
-        from aiogram.types import InlineKeyboardButton
-        builder = InlineKeyboardBuilder()
         builder.row(
             InlineKeyboardButton(
                 text="🏆 Информация о гонке",
                 callback_data=f"race_info_{round_num}"
             )
         )
-        builder.row(
-            InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu")
-        )
-        kb = builder.as_markup()
-    else:
-        kb = back_to_menu_kb()
+    
+    builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
+    kb = builder.as_markup()
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    track_photo = TRACK_MAPS.get(round_num)
+
+    if track_photo:
+        await callback.message.delete()
+        await callback.message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
+    else:
+        if callback.message.photo:
+            await callback.message.delete()
+            await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
+        else:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("watch_"))
+async def cb_where_to_watch(callback: CallbackQuery) -> None:
+    """Показывает ссылки на трансляции."""
+    try:
+        round_num = callback.data.split("_")[1]
+    except IndexError:
+        await callback.answer("Ошибка")
+        return
+
+    text = (
+        "📺 <b>Где смотреть трансляции Формулы 1:</b>\n\n"
+        f"• Алексей Попов/Наталья Фабричная- <a href='{WATCH_LINKS['popov']}'>Ссылка</a>\n"
+        f"• Станиславский - <a href='{WATCH_LINKS['stanislavsky']}'>Ссылка</a>\n"
+        f"• Simply Formula (Роман) - <a href='{WATCH_LINKS['simply']}'>Ссылка</a>"
+    )
+    
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="◀️ Назад к этапу", callback_data=f"race_{round_num}"))
+    kb = builder.as_markup()
+
+    if callback.message.photo:
+        await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
     await callback.answer()
 
 
@@ -196,23 +274,29 @@ async def cb_race_info(callback: CallbackQuery) -> None:
     kb = builder.as_markup()
 
     if data is None:
-        await callback.message.edit_text(
+        error_text = (
             f"{race['flag']} <b>{race['name']}</b>\n\n"
             "❌ Результаты ещё не опубликованы или API недоступен.\n"
-            "Попробуй через несколько часов после финиша.",
-            parse_mode="HTML", reply_markup=kb
+            "Попробуй через несколько часов после финиша."
         )
+        if callback.message.photo:
+            await callback.message.edit_caption(caption=error_text, parse_mode="HTML", reply_markup=kb)
+        else:
+            await callback.message.edit_text(error_text, parse_mode="HTML", reply_markup=kb)
         return
 
     try:
         results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
     except (KeyError, IndexError):
-        await callback.message.edit_text(
+        error_text = (
             f"{race['flag']} <b>{race['name']}</b>\n\n"
             "❌ Результаты ещё не опубликованы.\n"
-            "Данные появляются через несколько часов после финиша.",
-            parse_mode="HTML", reply_markup=kb
+            "Данные появляются через несколько часов после финиша."
         )
+        if callback.message.photo:
+            await callback.message.edit_caption(caption=error_text, parse_mode="HTML", reply_markup=kb)
+        else:
+            await callback.message.edit_text(error_text, parse_mode="HTML", reply_markup=kb)
         return
 
     # Топ-3
@@ -239,10 +323,10 @@ async def cb_race_info(callback: CallbackQuery) -> None:
             time_val = r.get("Time", {}).get("time", status)
             if pos == 1:
                 winner_time = time_val
-                lines.append(f"{icon} <b>{driver}</b> — {team}")
+                lines.append(f"{icon} <b>{driver}</b> - {team}")
                 lines.append(f"    ⏱ {time_val}")
             else:
-                lines.append(f"{icon} <b>{driver}</b> — {team}")
+                lines.append(f"{icon} <b>{driver}</b> - {team}")
                 lines.append(f"    {time_val}")
 
         # Быстрый круг
@@ -267,17 +351,19 @@ async def cb_race_info(callback: CallbackQuery) -> None:
     if pole_driver:
         lines += [
             "",
-            f"⚡ <b>Поул-позиция:</b> {pole_driver} — {pole_time}",
+            f"⚡ <b>Поул-позиция:</b> {pole_driver} - {pole_time}",
         ]
 
     if fastest_lap_driver and fastest_lap_time:
         lines += [
-            f"🔥 <b>Быстрый круг:</b> {fastest_lap_driver} — {fastest_lap_time}",
+            f"🔥 <b>Быстрый круг:</b> {fastest_lap_driver} - {fastest_lap_time}",
         ]
 
-    await callback.message.edit_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=kb
-    )
+    final_text = "\n".join(lines)
+    
+    if callback.message.photo:
+        await callback.message.edit_caption(caption=final_text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await callback.message.edit_text(final_text, parse_mode="HTML", reply_markup=kb)
+        
     logger.info("Пользователь запросил результаты этапа %d", round_num)
