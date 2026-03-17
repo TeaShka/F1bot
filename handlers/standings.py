@@ -112,18 +112,24 @@ def format_driver_standings(standings: list[dict], after_round: int) -> str:
         return "❌ Данные недоступны. Попробуй позже."
 
     lines = [
-        f"🏆 <b>Личный зачёт — Сезон 2026</b>",
-        f"<i>После этапа {after_round}</i>\n",
+        "<b>Личный зачёт — Сезон 2026</b>",
+        f"<i>После этапа {after_round}</i>",
+        "",
     ]
 
     for d in standings:
         pos = d["position"]
         medal = MEDALS.get(pos, f"{pos}.")
         flag = NATIONALITY_FLAGS.get(d["nationality"], "")
-        wins = f" ({d['wins']} побед)" if int(d["wins"]) > 0 else ""
+        wins = f" · {d['wins']} побед" if int(d["wins"]) > 0 else ""
+        # Короткое название команды
+        team_short = (d["team"]
+            .replace(" F1 Team", "").replace(" Racing", "")
+            .replace("Scuderia ", ""))
         lines.append(
-            f"{medal} {flag} <b>{d['name']}</b> — {d['points']} оч.{wins}\n"
-            f"    {d['team']}"
+            f"{medal} {flag} <b>{d['name']}</b>"
+            f"  <i>{team_short}</i>"
+            f"  {d['points']} оч.{wins}"
         )
 
     return "\n".join(lines)
@@ -135,16 +141,20 @@ def format_constructor_standings(standings: list[dict], after_round: int) -> str
         return "❌ Данные недоступны. Попробуй позже."
 
     lines = [
-        f"🏗 <b>Кубок конструкторов — Сезон 2026</b>",
-        f"<i>После этапа {after_round}</i>\n",
+        "<b>Кубок конструкторов — Сезон 2026</b>",
+        f"<i>После этапа {after_round}</i>",
+        "",
     ]
 
     for c in standings:
         pos = c["position"]
         medal = MEDALS.get(pos, f"{pos}.")
-        wins = f" ({c['wins']} побед)" if int(c["wins"]) > 0 else ""
+        wins = f" · {c['wins']} побед" if int(c["wins"]) > 0 else ""
+        name_short = (c["name"]
+            .replace(" F1 Team", "").replace(" Racing", "")
+            .replace("Scuderia ", ""))
         lines.append(
-            f"{medal} <b>{c['name']}</b> — {c['points']} очков{wins}"
+            f"{medal} <b>{name_short}</b>  {c['points']} оч.{wins}"
         )
 
     return "\n".join(lines)

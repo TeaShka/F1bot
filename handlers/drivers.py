@@ -5,8 +5,8 @@
 """
 
 import logging
-import aiohttp
 import asyncio
+from utils.cache import fetch_with_cache
 from aiogram import Router
 from aiogram.types import CallbackQuery
 
@@ -18,7 +18,7 @@ DRIVERS_2026_URL   = "https://api.jolpi.ca/ergast/f1/2026/drivers.json"
 DRIVER_SEASON_URL  = "https://api.jolpi.ca/ergast/f1/2026/drivers/{driver_id}/driverstandings.json"
 DRIVER_WINS_URL    = "https://api.jolpi.ca/ergast/f1/drivers/{driver_id}/results/1.json?limit=1000"
 DRIVER_POLES_URL   = "https://api.jolpi.ca/ergast/f1/drivers/{driver_id}/qualifying/1.json?limit=1000"
-from handlers.driver_bios import DRIVER_BIOS
+from .driver_bios import DRIVER_BIOS
 
 NATIONALITY_FLAGS = {
     "British":       "🇬🇧", "Dutch":         "🇳🇱", "Monegasque":    "🇲🇨",
@@ -32,14 +32,8 @@ NATIONALITY_FLAGS = {
 
 
 async def _get(url: str) -> dict | None:
-    """Универсальный GET запрос."""
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                return await r.json() if r.status == 200 else None
-    except Exception as e:
-        logger.error("API error %s: %s", url, e)
-        return None
+    """GET запрос с кэшированием на 1 час."""
+    return await fetch_with_cache(url)
 
 
 
@@ -201,6 +195,7 @@ async def cb_driver_profile(callback: CallbackQuery) -> None:
 
     # Добавляем биографию из словаря
     bio = DRIVER_BIOS.get(driver_id)
+    logger.info("driver_id=%s, bio=%s, photo=%s", driver_id, bool(bio), bio.get('photo') if bio else None)
     if bio:
         lines += [
             "",

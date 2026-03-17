@@ -23,11 +23,12 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏆 Таблица очков",    callback_data="standings_menu"),
     )
     builder.row(
+        InlineKeyboardButton(text="🏎 Пилоты 2026", callback_data="drivers_list"),
+    )    
+    builder.row(
         InlineKeyboardButton(text="⚙️ Настройки времени", callback_data="settings"),
     )
-    builder.row(
-    InlineKeyboardButton(text="🏎 Пилоты 2026", callback_data="drivers_list"),
-    )
+
     return builder.as_markup()
 
 

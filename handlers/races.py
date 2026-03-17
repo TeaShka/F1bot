@@ -94,18 +94,23 @@ def _build_race_detail(race: dict, tz: str) -> str:
 
     lines = [
         name_line,
-        f"Трасса: {race['circuit']}, {race['country']}",
+        f"<i>{race['circuit']} · {race['country']}</i>",
         "",
         "<b>Расписание сессий:</b>",
     ]
 
+    # Фиксированная ширина названия сессии для выравнивания
+    SESSION_WIDTH = 22
     for session_key, session_label in SESSION_NAMES.items():
         dt = race["sessions"].get(session_key)
         if dt is not None:
             time_str = format_dt(dt, tz)
-            lines.append(f"  {session_label}  {time_str}")
+            # Убираем эмодзи из подсчёта длины — берём только текст
+            label_clean = session_label.replace("⚡ ", "").replace("🏁 ", "")
+            padding = " " * max(1, SESSION_WIDTH - len(label_clean))
+            lines.append(f"<code>{label_clean}{padding}{time_str}</code>")
 
-    lines.append(f"\nЧасовой пояс: <code>{tz}</code>")
+    lines.append(f"\n<i>Часовой пояс: {tz}</i>")
     return "\n".join(lines)
 
 
@@ -130,8 +135,8 @@ async def cb_next_race(callback: CallbackQuery, db: Database) -> None:
                     if r["sessions"]["race"] >= race["sessions"]["race"])
 
     text = (
-        f"🔜 <b>Следующий Гран-при</b> (этап {race['round']} из {len(SCHEDULE_2026)})\n"
-        f"Осталось гонок в сезоне: {remaining}\n\n"
+        f"<b>Следующий Гран-при</b>  ·  этап {race['round']} из {len(SCHEDULE_2026)}\n"
+        f"<i>До конца сезона: {remaining} гонок</i>\n\n"
     ) + _build_race_detail(race, tz)
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder

@@ -39,17 +39,26 @@ logger = logging.getLogger(__name__)
 # ── Middleware для внедрения зависимостей ──────────────────────────────────────
 
 class DatabaseMiddleware:
-    """
-    Middleware, который добавляет экземпляр Database в данные обработчика.
-    Благодаря этому каждый хэндлер получает `db` как аргумент без
-    дополнительной глобальной переменной.
-    """
+    """Добавляет экземпляр Database в данные обработчика."""
 
     def __init__(self, db: Database) -> None:
         self.db = db
 
     async def __call__(self, handler, event, data: dict):
         data["db"] = self.db
+        return await handler(event, data)
+
+
+class LastSeenMiddleware:
+    """Обновляет last_seen пользователя при каждом взаимодействии."""
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    async def __call__(self, handler, event, data: dict):
+        user = getattr(event, "from_user", None)
+        if user:
+            self.db.update_last_seen(user.id)
         return await handler(event, data)
 
 
@@ -78,6 +87,8 @@ async def main() -> None:
     # Подключаем middleware к обоим типам апдейтов
     dp.message.middleware(DatabaseMiddleware(db))
     dp.callback_query.middleware(DatabaseMiddleware(db))
+    dp.message.middleware(LastSeenMiddleware(db))
+    dp.callback_query.middleware(LastSeenMiddleware(db))
 
     # Регистрируем все роутеры
     dp.include_router(root_router)

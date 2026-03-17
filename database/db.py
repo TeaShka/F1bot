@@ -1,17 +1,16 @@
 """
 Модуль работы с базой данных SQLite.
-Хранит ID пользователей, их часовые пояса и настройки уведомлений.
 """
 
 import sqlite3
 import logging
 from typing import Optional
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 
 class Database:
-    """Класс для работы с SQLite базой данных."""
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -19,22 +18,21 @@ class Database:
         self._upgrade_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        """Создаёт и возвращает соединение с БД."""
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # возвращаем строки как dict-подобные объекты
+        conn.row_factory = sqlite3.Row
         return conn
 
     def _init_db(self) -> None:
-        """Инициализирует схему базы данных при первом запуске."""
         with self._get_connection() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     user_id     INTEGER PRIMARY KEY,
                     username    TEXT,
                     timezone    TEXT    NOT NULL DEFAULT 'UTC',
-                    notify_qual INTEGER NOT NULL DEFAULT 0,  -- уведомление перед квалификацией
-                    notify_race INTEGER NOT NULL DEFAULT 0,  -- уведомление перед гонкой
-                    notify_time INTEGER NOT NULL DEFAULT 60, -- время за сколько уведомлять
+                    notify_qual INTEGER NOT NULL DEFAULT 0,
+                    notify_race INTEGER NOT NULL DEFAULT 0,
+                    notify_time INTEGER NOT NULL DEFAULT 60,
+                    last_seen   TEXT,
                     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
                 )
             """)
@@ -42,20 +40,23 @@ class Database:
         logger.info("База данных инициализирована: %s", self.db_path)
 
     def _upgrade_db(self) -> None:
-        """Добавляет колонку notify_time в существующую таблицу без потери данных."""
+        """Добавляет новые колонки в существующую таблицу без потери данных."""
+        columns_to_add = [
+            ("notify_time", "INTEGER NOT NULL DEFAULT 60"),
+            ("last_seen",   "TEXT"),
+        ]
         with self._get_connection() as conn:
-            try:
-                conn.execute("ALTER TABLE users ADD COLUMN notify_time INTEGER NOT NULL DEFAULT 60")
-                conn.commit()
-                logger.info("База данных обновлена: добавлена колонка notify_time")
-            except sqlite3.OperationalError:
-                # Колонка уже существует, игнорируем ошибку
-                pass
+            for col_name, col_def in columns_to_add:
+                try:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}")
+                    conn.commit()
+                    logger.info("БД обновлена: добавлена колонка %s", col_name)
+                except sqlite3.OperationalError:
+                    pass  # колонка уже существует
 
     # ── Пользователи ──────────────────────────────────────────────────────────
 
     def upsert_user(self, user_id: int, username: Optional[str] = None) -> None:
-        """Создаёт запись пользователя или обновляет username, если она уже есть."""
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO users (user_id, username)
@@ -64,8 +65,17 @@ class Database:
             """, (user_id, username))
             conn.commit()
 
+    def update_last_seen(self, user_id: int) -> None:
+        """Обновляет время последней активности пользователя."""
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE users SET last_seen = ? WHERE user_id = ?",
+                (now, user_id)
+            )
+            conn.commit()
+
     def get_user_timezone(self, user_id: int) -> str:
-        """Возвращает часовой пояс пользователя (по умолчанию UTC)."""
         with self._get_connection() as conn:
             row = conn.execute(
                 "SELECT timezone FROM users WHERE user_id = ?", (user_id,)
@@ -73,7 +83,6 @@ class Database:
         return row["timezone"] if row else "UTC"
 
     def set_user_timezone(self, user_id: int, timezone: str) -> None:
-        """Сохраняет часовой пояс пользователя."""
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO users (user_id, timezone)
@@ -83,10 +92,29 @@ class Database:
             conn.commit()
         logger.info("Пользователь %d: установлен часовой пояс %s", user_id, timezone)
 
+    def get_all_user_ids(self) -> list[int]:
+        """Возвращает ID всех пользователей для рассылки."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT user_id FROM users").fetchall()
+        return [row["user_id"] for row in rows]
+
+    def get_stats(self) -> dict:
+        """Возвращает статистику пользователей."""
+        with self._get_connection() as conn:
+            total = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]
+            dau = conn.execute("""
+                SELECT COUNT(*) as cnt FROM users
+                WHERE last_seen >= datetime('now', '-1 day')
+            """).fetchone()["cnt"]
+            wau = conn.execute("""
+                SELECT COUNT(*) as cnt FROM users
+                WHERE last_seen >= datetime('now', '-7 days')
+            """).fetchone()["cnt"]
+        return {"total": total, "dau": dau, "wau": wau}
+
     # ── Уведомления ───────────────────────────────────────────────────────────
 
     def get_notification_settings(self, user_id: int) -> dict:
-        """Возвращает настройки уведомлений пользователя."""
         with self._get_connection() as conn:
             row = conn.execute(
                 "SELECT notify_qual, notify_race, notify_time FROM users WHERE user_id = ?",
@@ -96,17 +124,11 @@ class Database:
             return {
                 "notify_qual": bool(row["notify_qual"]),
                 "notify_race": bool(row["notify_race"]),
-                "notify_time": row["notify_time"] if "notify_time" in row.keys() else 60
+                "notify_time": row["notify_time"] if "notify_time" in row.keys() else 60,
             }
         return {"notify_qual": False, "notify_race": False, "notify_time": 60}
 
     def set_notification(self, user_id: int, kind: str, value: bool) -> None:
-        """
-        Включает/выключает уведомление для пользователя.
-
-        :param kind: 'qual' или 'race'
-        :param value: True = включить, False = выключить
-        """
         column = f"notify_{kind}"
         with self._get_connection() as conn:
             conn.execute(
@@ -116,7 +138,6 @@ class Database:
             conn.commit()
 
     def get_notify_time(self, user_id: int) -> int:
-        """Возвращает время уведомления пользователя в минутах (по умолчанию 60)."""
         with self._get_connection() as conn:
             row = conn.execute(
                 "SELECT notify_time FROM users WHERE user_id = ?", (user_id,)
@@ -124,7 +145,6 @@ class Database:
         return row["notify_time"] if row and "notify_time" in row.keys() else 60
 
     def set_notify_time(self, user_id: int, minutes: int) -> None:
-        """Сохраняет настройку времени: за сколько минут уведомлять."""
         with self._get_connection() as conn:
             conn.execute(
                 "UPDATE users SET notify_time = ? WHERE user_id = ?",
@@ -133,9 +153,6 @@ class Database:
             conn.commit()
 
     def get_subscribers(self, kind: str) -> list[dict]:
-        """
-        Возвращает список пользователей, подписанных на уведомления.
-        """
         column = f"notify_{kind}"
         with self._get_connection() as conn:
             rows = conn.execute(
@@ -144,7 +161,6 @@ class Database:
         return [dict(row) for row in rows]
 
     def get_subscribers_by_time(self, kind: str, minutes: int) -> list[dict]:
-        """Возвращает подписчиков, которым нужно отправить уведомление за конкретное время."""
         column = f"notify_{kind}"
         with self._get_connection() as conn:
             rows = conn.execute(
