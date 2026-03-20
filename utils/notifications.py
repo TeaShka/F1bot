@@ -1,109 +1,169 @@
 """
-Сервис напоминаний.
-Запускается как фоновая задача asyncio и рассылает уведомления
-пользователям за 60 или 15 минут до старта сессии.
-
-Архитектура:
-  - Каждую минуту планировщик проверяет расписание.
-  - Если до квалификации или гонки осталось время, попадающее в окна 60 или 15 минут,
-    рассылаем уведомления нужным подписчикам.
-  - Чтобы избежать дублей, храним «отправленные» события в памяти
-    (в продакшне лучше использовать отдельную таблицу БД).
+Notification scheduler for race sessions.
 """
+
+from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 
 from bot_config.schedule import SCHEDULE_2026, SESSION_NAMES
 from database import Database
-from utils.time_utils import now_utc, format_dt
+from utils.time_utils import format_dt, now_utc
 
 logger = logging.getLogger(__name__)
 
-# Хранилище уже отправленных уведомлений: ключ = (round, session_key, target_minutes)
-_sent_notifications: set[tuple[int, str, int]] = set()
+SEASON = 2026
+MAX_IDLE_SLEEP_SECONDS = 3600
+LATE_GRACE_SECONDS = 75
+NOTIFICATION_MINUTES = (60, 15)
+
+SESSION_KIND_MAP = {
+    "fp1": "practice",
+    "fp2": "practice",
+    "fp3": "practice",
+    "sprint_qualifying": "sprint",
+    "sprint": "sprint",
+    "qualifying": "qual",
+    "race": "race",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationEvent:
+    season: int
+    round_number: int
+    race_name: str
+    session_key: str
+    session_dt: datetime
+    due_at: datetime
+    kind: str
+    minutes_left: int
+
+
+def _build_notification_events() -> list[NotificationEvent]:
+    events: list[NotificationEvent] = []
+    for race in SCHEDULE_2026:
+        for session_key, kind in SESSION_KIND_MAP.items():
+            session_dt = race["sessions"].get(session_key)
+            if session_dt is None:
+                continue
+
+            session_utc = session_dt.replace(tzinfo=timezone.utc)
+            for minutes_left in NOTIFICATION_MINUTES:
+                events.append(
+                    NotificationEvent(
+                        season=SEASON,
+                        round_number=race["round"],
+                        race_name=race["name"],
+                        session_key=session_key,
+                        session_dt=session_dt,
+                        due_at=session_utc - timedelta(minutes=minutes_left),
+                        kind=kind,
+                        minutes_left=minutes_left,
+                    )
+                )
+    return sorted(events, key=lambda event: event.due_at)
+
+
+NOTIFICATION_EVENTS = _build_notification_events()
 
 
 async def notification_scheduler(bot: Bot, db: Database) -> None:
     """
-    Бесконечный цикл планировщика уведомлений.
-    Проверяет расписание каждые 60 секунд.
+    Sleeps until the next due notification instead of scanning the full
+    calendar every minute.
     """
-    logger.info("Планировщик уведомлений запущен")
+    logger.info("Notification scheduler is running")
+
     while True:
-        try:
-            await _check_and_notify(bot, db)
-        except Exception as exc:
-            logger.exception("Ошибка в планировщике уведомлений: %s", exc)
-        await asyncio.sleep(60)
+        now = now_utc()
+        due_events = [
+            event
+            for event in NOTIFICATION_EVENTS
+            if _is_due(event, now) and not _is_sent(db, event)
+        ]
+
+        if due_events:
+            for event in due_events:
+                db.mark_notification_sent(
+                    event.season,
+                    event.round_number,
+                    event.session_key,
+                    event.minutes_left,
+                )
+                await _broadcast(bot, db, event)
+            await asyncio.sleep(1)
+            continue
+
+        next_due = _get_next_due_time(db, now)
+        if next_due is None:
+            await asyncio.sleep(MAX_IDLE_SLEEP_SECONDS)
+            continue
+
+        sleep_seconds = max(
+            1,
+            min((next_due - now).total_seconds(), MAX_IDLE_SLEEP_SECONDS),
+        )
+        await asyncio.sleep(sleep_seconds)
 
 
-async def _check_and_notify(bot: Bot, db: Database) -> None:
-    """Проверяет ближайшие сессии и рассылает уведомления."""
-    now = now_utc()
-
-    for race in SCHEDULE_2026:
-        for session_key in ("qualifying", "race"):
-            dt = race["sessions"].get(session_key)
-            if dt is None:
-                continue
-
-            session_utc = dt.replace(tzinfo=timezone.utc)
-            delta_minutes = (session_utc - now).total_seconds() / 60
-
-            # Проверяем попадание в окно уведомлений
-            target_minutes = None
-            if 59 <= delta_minutes <= 61:
-                target_minutes = 60
-            elif 14 <= delta_minutes <= 16:
-                target_minutes = 15
-
-            if target_minutes is None:
-                continue
-
-            event_key = (race["round"], session_key, target_minutes)
-            if event_key in _sent_notifications:
-                continue  # уже отправляли
-
-            _sent_notifications.add(event_key)
-            await _broadcast(bot, db, race, session_key, dt, target_minutes)
+def _is_due(event: NotificationEvent, now: datetime) -> bool:
+    delta_seconds = (now - event.due_at).total_seconds()
+    return 0 <= delta_seconds <= LATE_GRACE_SECONDS
 
 
-async def _broadcast(
-    bot: Bot,
-    db: Database,
-    race: dict,
-    session_key: str,
-    session_dt,
-    minutes_left: int
-) -> None:
-    """Рассылает уведомление всем подписчикам, выбравшим данное время."""
-    kind = "qual" if session_key == "qualifying" else "race"
-    subscribers = db.get_subscribers_by_time(kind, minutes_left)
+def _is_sent(db: Database, event: NotificationEvent) -> bool:
+    return db.has_sent_notification(
+        event.season,
+        event.round_number,
+        event.session_key,
+        event.minutes_left,
+    )
 
+
+def _get_next_due_time(db: Database, now: datetime) -> datetime | None:
+    for event in NOTIFICATION_EVENTS:
+        if event.due_at <= now:
+            continue
+        if _is_sent(db, event):
+            continue
+        return event.due_at
+    return None
+
+
+async def _broadcast(bot: Bot, db: Database, event: NotificationEvent) -> None:
+    subscribers = db.get_subscribers_by_time(event.kind, event.minutes_left)
     if not subscribers:
         return
 
-    session_label = SESSION_NAMES[session_key]
+    session_label = SESSION_NAMES[event.session_key]
     logger.info(
-        "Рассылаем уведомление (за %d мин): %s, %s — %d подписчиков",
-        minutes_left, race["name"], session_label, len(subscribers)
+        "Sending notification (%d min): %s, %s -> %d subscribers",
+        event.minutes_left,
+        event.race_name,
+        session_label,
+        len(subscribers),
     )
 
-    for sub in subscribers:
-        user_id = sub["user_id"]
-        tz = sub["timezone"]
-        time_str = format_dt(session_dt, tz)
-
+    for subscriber in subscribers:
+        user_id = subscriber["user_id"]
+        timezone_name = subscriber["timezone"]
+        time_str = format_dt(event.session_dt, timezone_name)
         text = (
-            f"⏰ <b>Через {minutes_left} минут</b> — {race['name']}\n"
+            f"⏰ <b>Через {event.minutes_left} минут</b> — {event.race_name}\n"
             f"{session_label} · {time_str}"
         )
+
         try:
             await bot.send_message(user_id, text, parse_mode="HTML")
         except Exception as exc:
-            logger.warning("Не удалось отправить уведомление пользователю %d: %s",
-                           user_id, exc)
+            logger.warning(
+                "Failed to send notification to user %d: %s",
+                user_id,
+                exc,
+            )

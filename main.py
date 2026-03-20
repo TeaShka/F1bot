@@ -1,46 +1,32 @@
 """
-main.py — точка входа в бота.
-
-Запуск:
-    python main.py
-
-Перед запуском:
-    1. Создайте файл .env на основе .env.example
-    2. Установите зависимости: pip install -r requirements.txt
+Entry point for the Telegram bot.
 """
 
 import asyncio
 import logging
 import sys
+import time
 
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from bot_config import load_config
-from database import Database
+from database import Database, SQLiteStorage
 from handlers import root_router
+from utils.api_client import ApiClient
 from utils.notifications import notification_scheduler
 
-
-# ── Настройка логирования ──────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
 
-# ── Middleware для внедрения зависимостей ──────────────────────────────────────
-
 class DatabaseMiddleware:
-    """Добавляет экземпляр Database в данные обработчика."""
-
     def __init__(self, db: Database) -> None:
         self.db = db
 
@@ -49,63 +35,76 @@ class DatabaseMiddleware:
         return await handler(event, data)
 
 
-class LastSeenMiddleware:
-    """Обновляет last_seen пользователя при каждом взаимодействии."""
+class ApiMiddleware:
+    def __init__(self, api: ApiClient) -> None:
+        self.api = api
 
-    def __init__(self, db: Database) -> None:
+    async def __call__(self, handler, event, data: dict):
+        data["api"] = self.api
+        return await handler(event, data)
+
+
+class LastSeenMiddleware:
+    def __init__(self, db: Database, *, min_interval_seconds: int = 300) -> None:
         self.db = db
+        self.min_interval_seconds = min_interval_seconds
+        self._recent_updates: dict[int, float] = {}
 
     async def __call__(self, handler, event, data: dict):
         user = getattr(event, "from_user", None)
         if user:
-            self.db.update_last_seen(user.id)
+            now = time.monotonic()
+            last_update = self._recent_updates.get(user.id)
+            if last_update is None or now - last_update >= self.min_interval_seconds:
+                self.db.update_last_seen(user.id)
+                self._recent_updates[user.id] = now
         return await handler(event, data)
 
 
-# ── Главная асинхронная функция ────────────────────────────────────────────────
-
 async def main() -> None:
     config = load_config()
-    logger.info("Конфигурация загружена. DB: %s", config.db_path)
+    logger.info("Configuration loaded. DB: %s", config.db_path)
 
-    # Инициализируем базу данных
     db = Database(config.db_path)
+    api = ApiClient()
+    await api.open()
 
-    # Создаём бота с HTML-парсингом по умолчанию
     bot = Bot(
         token=config.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-
-    # FSM-хранилище в оперативной памяти
-    # В продакшне стоит заменить на RedisStorage
-    storage = MemoryStorage()
-
-    # Dispatcher — центр маршрутизации
+    storage = SQLiteStorage(config.db_path)
     dp = Dispatcher(storage=storage)
 
-    # Подключаем middleware к обоим типам апдейтов
-    dp.message.middleware(DatabaseMiddleware(db))
-    dp.callback_query.middleware(DatabaseMiddleware(db))
-    dp.message.middleware(LastSeenMiddleware(db))
-    dp.callback_query.middleware(LastSeenMiddleware(db))
+    db_middleware = DatabaseMiddleware(db)
+    api_middleware = ApiMiddleware(api)
+    last_seen_middleware = LastSeenMiddleware(db)
 
-    # Регистрируем все роутеры
+    dp.message.middleware(db_middleware)
+    dp.callback_query.middleware(db_middleware)
+    dp.message.middleware(api_middleware)
+    dp.callback_query.middleware(api_middleware)
+    dp.message.middleware(last_seen_middleware)
+    dp.callback_query.middleware(last_seen_middleware)
+
     dp.include_router(root_router)
 
-    # Запускаем планировщик уведомлений как фоновую задачу
-    asyncio.create_task(notification_scheduler(bot, db))
-    logger.info("Планировщик уведомлений зарегистрирован как фоновая задача")
+    notification_task = asyncio.create_task(notification_scheduler(bot, db))
+    logger.info("Notification scheduler started")
 
-    # Удаляем возможный «застрявший» webhook и запускаем long-polling
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("Бот запущен, слушаем обновления...")
+    logger.info("Bot started, polling updates")
 
     try:
         await dp.start_polling(bot)
     finally:
+        notification_task.cancel()
+        await asyncio.gather(notification_task, return_exceptions=True)
+        await api.close()
+        await storage.close()
+        db.close()
         await bot.session.close()
-        logger.info("Бот остановлен")
+        logger.info("Bot stopped")
 
 
 if __name__ == "__main__":

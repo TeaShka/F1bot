@@ -6,8 +6,10 @@ from .time_utils import (
     format_dt,
     get_next_race,
 )
+from .api_client import ApiClient
 
 __all__ = [
+    "ApiClient",
     "POPULAR_TIMEZONES",
     "is_valid_timezone",
     "now_utc",
@@ -15,5 +17,3 @@ __all__ = [
     "format_dt",
     "get_next_race",
 ]
-
-from .cache import fetch_with_cache, invalidate_cache, clear_all_cache

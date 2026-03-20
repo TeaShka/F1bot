@@ -1,20 +1,19 @@
 """
-Админ-команды:
-  /stats      — статистика пользователей
-  /broadcast  — запуск режима рассылки
-  /cancel     — отмена рассылки
-  Отправка фото — получить file_id (только для админа)
+Admin-only commands:
+  /stats
+  /broadcast
+  /cancel
 """
 
 import asyncio
 import logging
 import os
 
-from aiogram import Router, Bot, F
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message
 
 from database import Database
 
@@ -22,6 +21,8 @@ logger = logging.getLogger(__name__)
 router = Router(name="admin")
 
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+BROADCAST_CONCURRENCY = 12
+BROADCAST_BATCH_SIZE = 60
 
 
 def _is_admin(user_id: int) -> bool:
@@ -31,8 +32,6 @@ def _is_admin(user_id: int) -> bool:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-
-# ── /stats ────────────────────────────────────────────────────────────────────
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message, db: Database) -> None:
@@ -44,13 +43,11 @@ async def cmd_stats(message: Message, db: Database) -> None:
     text = (
         "📊 <b>Статистика бота</b>\n\n"
         f"👥 Всего пользователей: <b>{stats['total']}</b>\n"
-        f"📅 Активных сегодня (DAU): <b>{stats['dau']}</b>\n"
-        f"📆 Активных за неделю (WAU): <b>{stats['wau']}</b>"
+        f"📆 Активных сегодня (DAU): <b>{stats['dau']}</b>\n"
+        f"📅 Активных за неделю (WAU): <b>{stats['wau']}</b>"
     )
     await message.answer(text, parse_mode="HTML")
 
-
-# ── /broadcast ────────────────────────────────────────────────────────────────
 
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, state: FSMContext) -> None:
@@ -61,10 +58,10 @@ async def cmd_broadcast(message: Message, state: FSMContext) -> None:
     await state.set_state(BroadcastStates.waiting_for_content)
     await message.answer(
         "📢 <b>Режим рассылки</b>\n\n"
-        "Отправь сообщение которое нужно разослать всем.\n"
-        "Можно отправить: текст, фото, видео, документ.\n\n"
+        "Отправь сообщение, которое нужно разослать всем.\n"
+        "Поддерживаются: текст, фото, видео, документ.\n\n"
         "Для отмены напиши /cancel",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -77,7 +74,7 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
 
 
 @router.message(BroadcastStates.waiting_for_content)
-async def process_broadcast_content(message: Message, state: FSMContext, db: Database, bot: Bot) -> None:
+async def process_broadcast_content(message: Message, state: FSMContext, db: Database) -> None:
     await state.clear()
 
     user_ids = db.get_all_user_ids()
@@ -91,35 +88,64 @@ async def process_broadcast_content(message: Message, state: FSMContext, db: Dat
 
     success = 0
     failed = 0
+    processed = 0
+    semaphore = asyncio.Semaphore(BROADCAST_CONCURRENCY)
 
-    for user_id in user_ids:
-        try:
-            await message.copy_to(user_id)
-            success += 1
-        except Exception as exc:
-            logger.warning("Не удалось отправить %d: %s", user_id, exc)
-            failed += 1
-        await asyncio.sleep(0.05)
+    for offset in range(0, len(user_ids), BROADCAST_BATCH_SIZE):
+        batch = user_ids[offset: offset + BROADCAST_BATCH_SIZE]
+        results = await asyncio.gather(
+            *(_send_copy(message, user_id, semaphore) for user_id in batch)
+        )
+
+        batch_success = sum(1 for result in results if result)
+        success += batch_success
+        failed += len(batch) - batch_success
+        processed += len(batch)
+
+        if processed < len(user_ids):
+            await status_msg.edit_text(
+                f"⏳ Рассылка: {processed}/{len(user_ids)}\n"
+                f"Успешно: {success}\n"
+                f"Ошибок: {failed}"
+            )
 
     await status_msg.edit_text(
         f"✅ <b>Рассылка завершена</b>\n\n"
         f"Отправлено: {success}\n"
         f"Ошибок: {failed}",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
-    logger.info("Рассылка завершена: успешно=%d, ошибок=%d", success, failed)
+    logger.info("Broadcast finished: success=%d, failed=%d", success, failed)
 
 
-# ── Получение file_id фото ────────────────────────────────────────────────────
+async def _send_copy(message: Message, user_id: int, semaphore: asyncio.Semaphore) -> bool:
+    async with semaphore:
+        try:
+            await message.copy_to(user_id)
+            return True
+        except Exception as exc:
+            retry_after = getattr(exc, "retry_after", None)
+            if retry_after:
+                try:
+                    await asyncio.sleep(float(retry_after))
+                    await message.copy_to(user_id)
+                    return True
+                except Exception as retry_exc:
+                    logger.warning("Retry send failed for %d: %s", user_id, retry_exc)
+                    return False
+
+            logger.warning("Failed to send broadcast to %d: %s", user_id, exc)
+            return False
+
 
 @router.message(F.photo)
 async def get_photo_file_id(message: Message) -> None:
-    """Отвечает file_id отправленного фото — только для админа."""
     if not _is_admin(message.from_user.id):
         return
+
     file_id = message.photo[-1].file_id
     await message.answer(
         "<b>file_id фото:</b>\n"
         f"<code>{file_id}</code>",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )

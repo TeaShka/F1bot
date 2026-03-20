@@ -5,7 +5,7 @@
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from utils.time_utils import POPULAR_TIMEZONES
 
@@ -14,21 +14,20 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     """Главное меню бота."""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🏎 Следующая гонка",  callback_data="next_race"),
+        InlineKeyboardButton(text="🏎 Следующая гонка", callback_data="next_race"),
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Календарь 2026",   callback_data="calendar"),
+        InlineKeyboardButton(text="📅 Календарь 2026", callback_data="calendar"),
     )
     builder.row(
-        InlineKeyboardButton(text="🏆 Таблица очков",    callback_data="standings_menu"),
+        InlineKeyboardButton(text="🏆 Таблица очков", callback_data="standings_menu"),
     )
     builder.row(
         InlineKeyboardButton(text="🏎 Пилоты 2026", callback_data="drivers_list"),
-    )    
+    )
     builder.row(
         InlineKeyboardButton(text="⚙️ Настройки времени", callback_data="settings"),
     )
-
     return builder.as_markup()
 
 
@@ -45,62 +44,76 @@ def calendar_kb(rounds: list[dict]) -> InlineKeyboardMarkup:
     Завершённые гонки отмечаются ✅.
     """
     from datetime import datetime, timezone
-    now = datetime.now(tz=timezone.utc)
 
+    now = datetime.now(tz=timezone.utc)
     builder = InlineKeyboardBuilder()
+
     for race in rounds:
         race_utc = race["sessions"]["race"].replace(tzinfo=timezone.utc)
         finished = now > race_utc
         if finished:
-            # Telegram не поддерживает HTML в тексте кнопок,
-            # поэтому используем эмодзи-зачёркивание через спецсимволы
             name = race["name"].replace("Гран-при ", "")
             label = f"✅ {name}"
         else:
             label = f"{race['flag']} Эт.{race['round']} {race['name']}"
-        builder.button(
-            text=label,
-            callback_data=f"race_{race['round']}"
-        )
+        builder.button(text=label, callback_data=f"race_{race['round']}")
+
     builder.adjust(1)
     builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
     return builder.as_markup()
 
 
-def settings_kb(notify_qual: bool, notify_race: bool, notify_time: int = 60) -> InlineKeyboardMarkup:
+def settings_kb(
+    notify_qual: bool,
+    notify_race: bool,
+    notify_sprint: bool,
+    notify_practice: bool,
+    notify_time: int = 60,
+) -> InlineKeyboardMarkup:
     """Клавиатура настроек: смена часового пояса и уведомления."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🌍 Изменить часовой пояс", callback_data="change_tz"
+            text="🌌 Изменить часовой пояс", callback_data="change_tz"
         )
     )
-    # Кнопки уведомлений с отображением текущего состояния
+
     qual_icon = "✅" if notify_qual else "❌"
     race_icon = "✅" if notify_race else "❌"
+    sprint_icon = "✅" if notify_sprint else "❌"
+    practice_icon = "✅" if notify_practice else "❌"
     time_label = "1 час" if notify_time == 60 else "15 мин"
 
     builder.row(
         InlineKeyboardButton(
             text=f"{qual_icon} Уведомление: квалификация",
-            callback_data="toggle_notify_qual"
+            callback_data="toggle_notify_qual",
         )
     )
     builder.row(
         InlineKeyboardButton(
             text=f"{race_icon} Уведомление: гонка",
-            callback_data="toggle_notify_race"
+            callback_data="toggle_notify_race",
         )
     )
-    
-    # Кнопка переключения времени
+    builder.row(
+        InlineKeyboardButton(
+            text=f"{sprint_icon} Уведомление: спринты",
+            callback_data="toggle_notify_sprint",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=f"{practice_icon} Уведомление: практики",
+            callback_data="toggle_notify_practice",
+        )
+    )
     builder.row(
         InlineKeyboardButton(
             text=f"⏰ Напомнить за: {time_label}",
-            callback_data="toggle_notify_time"
+            callback_data="toggle_notify_time",
         )
     )
-    
     builder.row(
         InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu")
     )
@@ -117,17 +130,17 @@ def timezone_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="✏️ Ввести вручную", callback_data="tz_manual"),
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ Назад",          callback_data="settings"),
+        InlineKeyboardButton(text="◀️ Назад", callback_data="settings"),
     )
     return builder.as_markup()
 
 
 def share_location_kb() -> ReplyKeyboardMarkup:
-    """Reply-клавиатура для отправки геолокации (автоопределение пояса)."""
+    """Reply-клавиатура для отправки геолокации."""
     builder = ReplyKeyboardBuilder()
     builder.button(
         text="📍 Отправить геолокацию",
-        request_location=True
+        request_location=True,
     )
     builder.button(text="❌ Отмена")
     builder.adjust(1)
@@ -143,13 +156,12 @@ def standings_menu_kb() -> InlineKeyboardMarkup:
     """Меню выбора таблицы очков."""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="👤 Личный зачёт",   callback_data="driver_standings"),
+        InlineKeyboardButton(text="👤 Личный зачёт", callback_data="driver_standings"),
     )
     builder.row(
-        InlineKeyboardButton(text="🏗 Конструкторы",    callback_data="constructor_standings"),
+        InlineKeyboardButton(text="🏗 Конструкторы", callback_data="constructor_standings"),
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ В главное меню",  callback_data="main_menu"),
+        InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"),
     )
-    
     return builder.as_markup()

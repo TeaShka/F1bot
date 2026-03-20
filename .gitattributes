@@ -1,0 +1,24 @@
+* text=auto
+
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.env text eol=lf
+
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+*.db binary
+*.db-shm binary
+*.db-wal binary
+*.pyc binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
