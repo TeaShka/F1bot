@@ -1,8 +1,5 @@
 """
-Admin-only commands:
-  /stats
-  /broadcast
-  /cancel
+Admin-only commands.
 """
 
 import asyncio
@@ -15,7 +12,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from bot_config.schedule import SCHEDULE_2026
 from database import Database
+from utils import get_next_race
+from utils.result_digest import (
+    build_sample_qualifying_digest_text,
+    build_sample_race_digest_text,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin")
@@ -73,6 +76,30 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     await message.answer("❌ Рассылка отменена.")
 
 
+@router.message(Command("test_digest"))
+async def cmd_test_digest(message: Message) -> None:
+    if not _is_admin(message.from_user.id):
+        await message.answer("⛔ Нет доступа.")
+        return
+
+    race = get_next_race(SCHEDULE_2026) or SCHEDULE_2026[0]
+    parts = (message.text or "").split(maxsplit=1)
+    mode = parts[1].strip().lower() if len(parts) > 1 else ""
+
+    if mode == "qual":
+        await message.answer(build_sample_qualifying_digest_text(race), parse_mode="HTML")
+        return
+
+    if mode == "race":
+        await message.answer(build_sample_race_digest_text(race), parse_mode="HTML")
+        return
+
+    await message.answer("<b>Пример квалификационного дайджеста</b>", parse_mode="HTML")
+    await message.answer(build_sample_qualifying_digest_text(race), parse_mode="HTML")
+    await message.answer("<b>Пример пост-гоночного дайджеста</b>", parse_mode="HTML")
+    await message.answer(build_sample_race_digest_text(race), parse_mode="HTML")
+
+
 @router.message(BroadcastStates.waiting_for_content)
 async def process_broadcast_content(message: Message, state: FSMContext, db: Database) -> None:
     await state.clear()
@@ -92,7 +119,7 @@ async def process_broadcast_content(message: Message, state: FSMContext, db: Dat
     semaphore = asyncio.Semaphore(BROADCAST_CONCURRENCY)
 
     for offset in range(0, len(user_ids), BROADCAST_BATCH_SIZE):
-        batch = user_ids[offset: offset + BROADCAST_BATCH_SIZE]
+        batch = user_ids[offset : offset + BROADCAST_BATCH_SIZE]
         results = await asyncio.gather(
             *(_send_copy(message, user_id, semaphore) for user_id in batch)
         )

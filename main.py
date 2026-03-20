@@ -89,7 +89,7 @@ async def main() -> None:
 
     dp.include_router(root_router)
 
-    notification_task = asyncio.create_task(notification_scheduler(bot, db))
+    notification_task = asyncio.create_task(notification_scheduler(bot, db, api))
     logger.info("Notification scheduler started")
 
     await bot.delete_webhook(drop_pending_updates=True)

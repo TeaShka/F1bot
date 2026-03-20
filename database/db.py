@@ -12,7 +12,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_NOTIFICATION_KINDS = {"qual", "race", "sprint", "practice"}
+ALLOWED_NOTIFICATION_KINDS = {"qual", "race", "sprint", "practice", "results"}
 
 
 class Database:
@@ -68,6 +68,7 @@ class Database:
                     notify_race INTEGER NOT NULL DEFAULT 0,
                     notify_sprint INTEGER NOT NULL DEFAULT 0,
                     notify_practice INTEGER NOT NULL DEFAULT 0,
+                    notify_results INTEGER NOT NULL DEFAULT 0,
                     notify_time INTEGER NOT NULL DEFAULT 60,
                     last_seen TEXT,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -95,6 +96,7 @@ class Database:
             ("last_seen", "TEXT"),
             ("notify_sprint", "INTEGER NOT NULL DEFAULT 0"),
             ("notify_practice", "INTEGER NOT NULL DEFAULT 0"),
+            ("notify_results", "INTEGER NOT NULL DEFAULT 0"),
         ]
         for column_name, column_def in columns_to_add:
             try:
@@ -110,6 +112,7 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_users_notify_race_time ON users(notify_race, notify_time)",
             "CREATE INDEX IF NOT EXISTS idx_users_notify_sprint_time ON users(notify_sprint, notify_time)",
             "CREATE INDEX IF NOT EXISTS idx_users_notify_practice_time ON users(notify_practice, notify_time)",
+            "CREATE INDEX IF NOT EXISTS idx_users_notify_results ON users(notify_results)",
             "CREATE INDEX IF NOT EXISTS idx_sent_notifications_sent_at ON sent_notifications(sent_at)",
         ]
         with self._lock:
@@ -183,7 +186,7 @@ class Database:
     def get_notification_settings(self, user_id: int) -> dict:
         row = self._fetchone(
             """
-            SELECT notify_qual, notify_race, notify_sprint, notify_practice, notify_time
+            SELECT notify_qual, notify_race, notify_sprint, notify_practice, notify_results, notify_time
             FROM users
             WHERE user_id = ?
             """,
@@ -195,6 +198,7 @@ class Database:
                 "notify_race": bool(row["notify_race"]),
                 "notify_sprint": bool(row["notify_sprint"]),
                 "notify_practice": bool(row["notify_practice"]),
+                "notify_results": bool(row["notify_results"]),
                 "notify_time": row["notify_time"],
             }
         return {
@@ -202,6 +206,7 @@ class Database:
             "notify_race": False,
             "notify_sprint": False,
             "notify_practice": False,
+            "notify_results": False,
             "notify_time": 60,
         }
 

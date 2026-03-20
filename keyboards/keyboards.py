@@ -1,17 +1,19 @@
 """
-Модуль клавиатур.
-Все Inline- и Reply-клавиатуры бота собраны здесь.
+Bot keyboards.
 """
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from utils.time_utils import POPULAR_TIMEZONES
 
 
 def main_menu_kb() -> InlineKeyboardMarkup:
-    """Главное меню бота."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="🏎 Следующая гонка", callback_data="next_race"),
@@ -32,17 +34,12 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 
 def back_to_menu_kb() -> InlineKeyboardMarkup:
-    """Кнопка возврата в главное меню."""
     builder = InlineKeyboardBuilder()
     builder.button(text="◀️ В главное меню", callback_data="main_menu")
     return builder.as_markup()
 
 
 def calendar_kb(rounds: list[dict]) -> InlineKeyboardMarkup:
-    """
-    Клавиатура для листания этапов календаря.
-    Завершённые гонки отмечаются ✅.
-    """
     from datetime import datetime, timezone
 
     now = datetime.now(tz=timezone.utc)
@@ -68,13 +65,14 @@ def settings_kb(
     notify_race: bool,
     notify_sprint: bool,
     notify_practice: bool,
+    notify_results: bool,
     notify_time: int = 60,
 ) -> InlineKeyboardMarkup:
-    """Клавиатура настроек: смена часового пояса и уведомления."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🌌 Изменить часовой пояс", callback_data="change_tz"
+            text="🌌 Изменить часовой пояс",
+            callback_data="change_tz",
         )
     )
 
@@ -82,6 +80,7 @@ def settings_kb(
     race_icon = "✅" if notify_race else "❌"
     sprint_icon = "✅" if notify_sprint else "❌"
     practice_icon = "✅" if notify_practice else "❌"
+    results_icon = "✅" if notify_results else "❌"
     time_label = "1 час" if notify_time == 60 else "15 мин"
 
     builder.row(
@@ -110,6 +109,12 @@ def settings_kb(
     )
     builder.row(
         InlineKeyboardButton(
+            text=f"{results_icon} Итоги этапа",
+            callback_data="toggle_notify_results",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text=f"⏰ Напомнить за: {time_label}",
             callback_data="toggle_notify_time",
         )
@@ -121,7 +126,6 @@ def settings_kb(
 
 
 def timezone_kb() -> InlineKeyboardMarkup:
-    """Клавиатура выбора часового пояса из популярных."""
     builder = InlineKeyboardBuilder()
     for label, tz_id in POPULAR_TIMEZONES.items():
         builder.button(text=label, callback_data=f"tz_{tz_id}")
@@ -136,7 +140,6 @@ def timezone_kb() -> InlineKeyboardMarkup:
 
 
 def share_location_kb() -> ReplyKeyboardMarkup:
-    """Reply-клавиатура для отправки геолокации."""
     builder = ReplyKeyboardBuilder()
     builder.button(
         text="📍 Отправить геолокацию",
@@ -148,12 +151,10 @@ def share_location_kb() -> ReplyKeyboardMarkup:
 
 
 def remove_kb() -> ReplyKeyboardRemove:
-    """Убирает Reply-клавиатуру."""
     return ReplyKeyboardRemove()
 
 
 def standings_menu_kb() -> InlineKeyboardMarkup:
-    """Меню выбора таблицы очков."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="👤 Личный зачёт", callback_data="driver_standings"),
