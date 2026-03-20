@@ -19,23 +19,23 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏎 Следующая гонка", callback_data="next_race"),
     )
     builder.row(
-        InlineKeyboardButton(text="📅 Календарь 2026", callback_data="calendar"),
+        InlineKeyboardButton(text="📅 Календарь сезона", callback_data="calendar"),
     )
     builder.row(
-        InlineKeyboardButton(text="🏆 Таблица очков", callback_data="standings_menu"),
+        InlineKeyboardButton(text="🏆 Чемпионат", callback_data="standings_menu"),
     )
     builder.row(
-        InlineKeyboardButton(text="🏎 Пилоты 2026", callback_data="drivers_list"),
+        InlineKeyboardButton(text="🏁 Пилоты сезона", callback_data="drivers_list"),
     )
     builder.row(
-        InlineKeyboardButton(text="⚙️ Настройки времени", callback_data="settings"),
+        InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
     )
     return builder.as_markup()
 
 
 def back_to_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="◀️ В главное меню", callback_data="main_menu")
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
     return builder.as_markup()
 
 
@@ -48,15 +48,13 @@ def calendar_kb(rounds: list[dict]) -> InlineKeyboardMarkup:
     for race in rounds:
         race_utc = race["sessions"]["race"].replace(tzinfo=timezone.utc)
         finished = now > race_utc
-        if finished:
-            name = race["name"].replace("Гран-при ", "")
-            label = f"✅ {name}"
-        else:
-            label = f"{race['flag']} Эт.{race['round']} {race['name']}"
+        name = race["name"].replace("Гран-при ", "")
+        prefix = "✅" if finished else race["flag"]
+        label = f"{prefix} Эт.{race['round']} {name}"
         builder.button(text=label, callback_data=f"race_{race['round']}")
 
     builder.adjust(1)
-    builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
+    builder.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu"))
     return builder.as_markup()
 
 
@@ -71,7 +69,7 @@ def settings_kb(
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🌌 Изменить часовой пояс",
+            text="🌍 Часовой пояс",
             callback_data="change_tz",
         )
     )
@@ -85,25 +83,25 @@ def settings_kb(
 
     builder.row(
         InlineKeyboardButton(
-            text=f"{qual_icon} Уведомление: квалификация",
+            text=f"{qual_icon} Квалификация",
             callback_data="toggle_notify_qual",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=f"{race_icon} Уведомление: гонка",
+            text=f"{race_icon} Гонка",
             callback_data="toggle_notify_race",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=f"{sprint_icon} Уведомление: спринты",
+            text=f"{sprint_icon} Спринты",
             callback_data="toggle_notify_sprint",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=f"{practice_icon} Уведомление: практики",
+            text=f"{practice_icon} Практики",
             callback_data="toggle_notify_practice",
         )
     )
@@ -115,12 +113,12 @@ def settings_kb(
     )
     builder.row(
         InlineKeyboardButton(
-            text=f"⏰ Напомнить за: {time_label}",
+            text=f"⏰ За сколько: {time_label}",
             callback_data="toggle_notify_time",
         )
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu")
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")
     )
     return builder.as_markup()
 
@@ -134,7 +132,7 @@ def timezone_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="✏️ Ввести вручную", callback_data="tz_manual"),
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ Назад", callback_data="settings"),
+        InlineKeyboardButton(text="◀ Назад", callback_data="settings"),
     )
     return builder.as_markup()
 
@@ -157,12 +155,12 @@ def remove_kb() -> ReplyKeyboardRemove:
 def standings_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="👤 Личный зачёт", callback_data="driver_standings"),
+        InlineKeyboardButton(text="👤 Пилоты", callback_data="driver_standings"),
     )
     builder.row(
         InlineKeyboardButton(text="🏗 Конструкторы", callback_data="constructor_standings"),
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu"),
     )
     return builder.as_markup()

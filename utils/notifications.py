@@ -14,6 +14,7 @@ from aiogram import Bot
 from bot_config.schedule import SCHEDULE_2026, SESSION_NAMES
 from database import Database
 from utils.api_client import ApiClient
+from utils.openf1 import load_race_insights
 from utils.result_digest import (
     QUALI_RESULTS_URL,
     RACE_RESULTS_URL,
@@ -31,6 +32,7 @@ MAX_IDLE_SLEEP_SECONDS = 3600
 LATE_GRACE_SECONDS = 75
 NOTIFICATION_MINUTES = (60, 15)
 RESULT_POLL_INTERVAL_SECONDS = 300
+OPENF1_RACE_DIGEST_FALLBACK_AFTER = timedelta(hours=12)
 RESULT_AVAILABLE_DELAY = {
     "qualifying": timedelta(minutes=75),
     "race": timedelta(hours=2, minutes=10),
@@ -244,7 +246,7 @@ async def _process_result_digests(
         if retry_at is not None and now < retry_at:
             continue
 
-        payload = await _load_digest_payload(api, event)
+        payload = await _load_digest_payload(api, event, now)
         if payload is None:
             _result_retry_at[_result_event_key(event)] = now + timedelta(seconds=RESULT_POLL_INTERVAL_SECONDS)
             continue
@@ -262,7 +264,11 @@ async def _process_result_digests(
     return sent_any
 
 
-async def _load_digest_payload(api: ApiClient, event: ResultDigestEvent) -> dict | None:
+async def _load_digest_payload(
+    api: ApiClient,
+    event: ResultDigestEvent,
+    now: datetime,
+) -> dict | None:
     if event.session_key == "qualifying":
         qualifying_data = await api.fetch_json(
             QUALI_RESULTS_URL.format(round=event.round_number),
@@ -286,9 +292,16 @@ async def _load_digest_payload(api: ApiClient, event: ResultDigestEvent) -> dict
         ttl=3600,
         allow_stale=True,
     )
+    openf1_insights = await load_race_insights(api, event.race, allow_stale=False)
+    if openf1_insights is None or not openf1_insights.get("session_result"):
+        if now < event.available_after + OPENF1_RACE_DIGEST_FALLBACK_AFTER:
+            return None
+        openf1_insights = None
+
     return {
         "race_data": race_data,
         "qualifying_data": qualifying_data,
+        "openf1_insights": openf1_insights,
     }
 
 
@@ -355,6 +368,7 @@ async def _broadcast_result_digest(
                 event.race,
                 payload["race_data"],
                 payload.get("qualifying_data"),
+                payload.get("openf1_insights"),
             )
 
         try:

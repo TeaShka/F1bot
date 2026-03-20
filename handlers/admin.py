@@ -16,6 +16,7 @@ from bot_config.schedule import SCHEDULE_2026
 from database import Database
 from utils import get_next_race
 from utils.result_digest import (
+    build_sample_extended_race_digest_text,
     build_sample_qualifying_digest_text,
     build_sample_race_digest_text,
 )
@@ -94,10 +95,16 @@ async def cmd_test_digest(message: Message) -> None:
         await message.answer(build_sample_race_digest_text(race), parse_mode="HTML")
         return
 
+    if mode == "extended":
+        await message.answer(build_sample_extended_race_digest_text(race), parse_mode="HTML")
+        return
+
     await message.answer("<b>Пример квалификационного дайджеста</b>", parse_mode="HTML")
     await message.answer(build_sample_qualifying_digest_text(race), parse_mode="HTML")
     await message.answer("<b>Пример пост-гоночного дайджеста</b>", parse_mode="HTML")
     await message.answer(build_sample_race_digest_text(race), parse_mode="HTML")
+    await message.answer("<b>Пример расширенного OpenF1-дайджеста</b>", parse_mode="HTML")
+    await message.answer(build_sample_extended_race_digest_text(race), parse_mode="HTML")
 
 
 @router.message(BroadcastStates.waiting_for_content)

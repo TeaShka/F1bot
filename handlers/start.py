@@ -60,7 +60,7 @@ async def cmd_start(message: Message, db: Database) -> None:
 
 @router.callback_query(lambda c: c.data == "main_menu")
 async def cb_main_menu(callback: CallbackQuery) -> None:
-    text = "🏠 <b>Главное меню</b>\n\nВыберите раздел:"
+    text = "🏠 <b>Главное меню</b>\n\nВыберите, что хотите посмотреть:"
     kb = main_menu_kb()
     try:
         if callback.message.photo:
@@ -93,8 +93,8 @@ async def cmd_next(message: Message, db: Database) -> None:
     )
 
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="📺 Где смотреть?", callback_data=f"watch_{race['round']}"))
-    builder.row(InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"))
+    builder.row(InlineKeyboardButton(text="📺 Где смотреть", callback_data=f"watch_{race['round']}"))
+    builder.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu"))
     kb = builder.as_markup()
 
     track_photo = TRACK_MAPS.get(race["round"])
@@ -110,7 +110,7 @@ async def cmd_calendar(message: Message) -> None:
     from keyboards import calendar_kb
 
     await message.answer(
-        "📅 <b>Календарь Формулы 1 — Сезон 2026</b>\n\nВыберите этап:",
+        "📅 <b>Календарь 2026</b>\n\nВыберите этап:",
         parse_mode="HTML",
         reply_markup=calendar_kb(SCHEDULE_2026),
     )
@@ -121,7 +121,7 @@ async def cmd_standings(message: Message) -> None:
     from keyboards import standings_menu_kb
 
     await message.answer(
-        "🏆 <b>Таблица очков — Сезон 2026</b>\n\nВыберите зачёт:",
+        "🏆 <b>Чемпионат 2026</b>\n\nВыберите раздел:",
         parse_mode="HTML",
         reply_markup=standings_menu_kb(),
     )
@@ -143,7 +143,7 @@ async def cmd_pilots(message: Message, api: ApiClient) -> None:
         return
 
     await message.answer(
-        "🏎 <b>Пилоты сезона 2026</b>\n\nВыберите пилота:",
+        "🏁 <b>Пилоты сезона 2026</b>\n\nВыберите пилота:",
         parse_mode="HTML",
         reply_markup=_drivers_kb(drivers),
     )

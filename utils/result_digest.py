@@ -5,6 +5,12 @@ Helpers for result-release digests.
 from __future__ import annotations
 
 from bot_config.schedule import SESSION_NAMES
+from utils.openf1 import (
+    build_pit_summary_lines,
+    build_race_control_lines,
+    format_weather_summary,
+    summarize_weather,
+)
 from utils.time_utils import format_dt
 
 QUALI_RESULTS_URL = "https://api.jolpi.ca/ergast/f1/2026/{round}/qualifying.json"
@@ -63,6 +69,7 @@ def build_race_digest_text(
     race: dict,
     race_data: dict,
     qualifying_data: dict | None = None,
+    openf1_insights: dict | None = None,
 ) -> str:
     results = race_data["MRData"]["RaceTable"]["Races"][0]["Results"]
     lines = [
@@ -105,7 +112,30 @@ def build_race_digest_text(
     if fastest_lap_driver and fastest_lap_time:
         lines.append(f"🔥 <b>Быстрый круг:</b> {fastest_lap_driver} — {fastest_lap_time}")
 
+    if openf1_insights:
+        lines.extend(_build_openf1_digest_block(openf1_insights))
+
     return "\n".join(lines)
+
+
+def _build_openf1_digest_block(openf1_insights: dict) -> list[str]:
+    details: list[str] = []
+
+    weather_summary = summarize_weather(openf1_insights.get("weather", []))
+    if weather_summary is not None:
+        details.append(f"• Погода: {format_weather_summary(weather_summary)}")
+
+    details.extend(build_race_control_lines(openf1_insights.get("race_control", [])))
+    details.extend(
+        build_pit_summary_lines(
+            openf1_insights.get("pit", []),
+            openf1_insights.get("drivers", {}),
+        )
+    )
+
+    if not details:
+        return []
+    return ["", "<b>OpenF1:</b>", *details]
 
 
 def build_sample_qualifying_digest_text(race: dict) -> str:
@@ -141,6 +171,19 @@ def build_sample_race_digest_text(race: dict) -> str:
         ]
     )
 
+
+def build_sample_extended_race_digest_text(race: dict) -> str:
+    return "\n".join(
+        [
+            build_sample_race_digest_text(race),
+            "",
+            "<b>OpenF1:</b>",
+            "• Погода: воздух 28.1–31.4° • трасса 40.8–47.2° • влажность 61% • ветер до 5.8 м/с • сухо",
+            "• SC: 1 • VSC: 1 • жёлтые флаги: 3",
+            "• Последнее заметное сообщение: CAR 81 UNDER INVESTIGATION FOR PIT EXIT INCIDENT",
+            "• Быстрейший пит-стоп: Oscar Piastri — 2.18 c • больше всего остановок: Lewis Hamilton (3)",
+        ]
+    )
 
 def _driver_name(driver: dict) -> str:
     return f"{driver['givenName']} {driver['familyName']}"

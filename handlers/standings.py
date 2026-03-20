@@ -91,10 +91,10 @@ def parse_constructor_standings(data: dict) -> list[dict]:
 
 def format_driver_standings(standings: list[dict], after_round: int) -> str:
     if not standings:
-        return "❌ Данные недоступны. Попробуй позже."
+        return "Данные чемпионата пока недоступны.\nПопробуйте ещё раз чуть позже."
 
     lines = [
-        "<b>Личный зачёт — Сезон 2026</b>",
+        "<b>Чемпионат 2026 — пилоты</b>",
         f"<i>После этапа {after_round}</i>",
         "",
     ]
@@ -121,10 +121,10 @@ def format_driver_standings(standings: list[dict], after_round: int) -> str:
 
 def format_constructor_standings(standings: list[dict], after_round: int) -> str:
     if not standings:
-        return "❌ Данные недоступны. Попробуй позже."
+        return "Данные чемпионата пока недоступны.\nПопробуйте ещё раз чуть позже."
 
     lines = [
-        "<b>Кубок конструкторов — Сезон 2026</b>",
+        "<b>Чемпионат 2026 — конструкторы</b>",
         f"<i>После этапа {after_round}</i>",
         "",
     ]
@@ -146,13 +146,13 @@ def format_constructor_standings(standings: list[dict], after_round: int) -> str
 
 @router.callback_query(lambda c: c.data == "driver_standings")
 async def cb_driver_standings(callback: CallbackQuery, api: ApiClient) -> None:
-    await callback.answer("⏳ Загружаю данные...")
+    await callback.answer("⏳ Загружаю чемпионат...")
 
     data = await fetch_standings(api, DRIVER_STANDINGS_URL)
     if data is None:
         await callback.message.edit_text(
-            "❌ Не удалось получить данные с сервера.\n"
-            "API Jolpica временно недоступен, попробуй через несколько минут.",
+            "Не удалось получить данные чемпионата.\n"
+            "Сервис статистики временно недоступен, попробуйте чуть позже.",
             reply_markup=_standings_back_kb(),
         )
         return
@@ -172,13 +172,13 @@ async def cb_driver_standings(callback: CallbackQuery, api: ApiClient) -> None:
 
 @router.callback_query(lambda c: c.data == "constructor_standings")
 async def cb_constructor_standings(callback: CallbackQuery, api: ApiClient) -> None:
-    await callback.answer("⏳ Загружаю данные...")
+    await callback.answer("⏳ Загружаю чемпионат...")
 
     data = await fetch_standings(api, CONSTRUCTOR_STANDINGS_URL)
     if data is None:
         await callback.message.edit_text(
-            "❌ Не удалось получить данные с сервера.\n"
-            "API Jolpica временно недоступен, попробуй через несколько минут.",
+            "Не удалось получить данные чемпионата.\n"
+            "Сервис статистики временно недоступен, попробуйте чуть позже.",
             reply_markup=_standings_back_kb(),
         )
         return
@@ -202,11 +202,14 @@ def _standings_back_kb():
 
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="👤 Личный зачёт", callback_data="driver_standings"),
+        InlineKeyboardButton(text="👤 Пилоты", callback_data="driver_standings"),
         InlineKeyboardButton(text="🏗 Конструкторы", callback_data="constructor_standings"),
     )
     builder.row(
-        InlineKeyboardButton(text="◀️ В главное меню", callback_data="main_menu"),
+        InlineKeyboardButton(text="◀ К разделу чемпионата", callback_data="standings_menu"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu"),
     )
     return builder.as_markup()
 
@@ -216,7 +219,7 @@ async def cb_standings_menu(callback: CallbackQuery) -> None:
     from keyboards import standings_menu_kb
 
     await callback.message.edit_text(
-        "🏆 <b>Таблица очков — Сезон 2026</b>\n\nВыберите зачёт:",
+        "🏆 <b>Чемпионат 2026</b>\n\nВыберите раздел:",
         parse_mode="HTML",
         reply_markup=standings_menu_kb(),
     )

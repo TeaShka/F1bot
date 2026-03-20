@@ -8,9 +8,11 @@ import asyncio
 import hashlib
 import json
 import logging
+import socket
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 
@@ -20,22 +22,37 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True)
 class CacheEntry:
     timestamp: float
-    data: dict
+    data: Any
 
 
 class ApiClient:
-    def __init__(self, timeout_seconds: int = 10, cache_dir: str = ".api_cache") -> None:
+    def __init__(
+        self,
+        timeout_seconds: int = 10,
+        cache_dir: str = ".api_cache",
+        *,
+        force_ipv4: bool = False,
+        proxy: str | None = None,
+    ) -> None:
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self._session: aiohttp.ClientSession | None = None
         self._cache: dict[str, CacheEntry] = {}
         self._inflight: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
         self._cache_dir = Path(cache_dir)
+        self._force_ipv4 = force_ipv4
+        self._proxy = proxy
 
     async def open(self) -> None:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=self._timeout)
+            connector = aiohttp.TCPConnector(
+                family=socket.AF_INET if self._force_ipv4 else socket.AF_UNSPEC,
+            )
+            self._session = aiohttp.ClientSession(
+                timeout=self._timeout,
+                connector=connector,
+            )
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -47,7 +64,7 @@ class ApiClient:
         *,
         ttl: int = 0,
         allow_stale: bool = True,
-    ) -> dict | None:
+    ) -> Any | None:
         now = time.time()
         cached = self._get_cached_entry(url)
         if ttl > 0 and cached and now - cached.timestamp < ttl:
@@ -100,12 +117,12 @@ class ApiClient:
             except OSError as exc:
                 logger.warning("Failed to clear API cache file %s: %s", path, exc)
 
-    async def _fetch_and_store(self, url: str) -> dict | None:
+    async def _fetch_and_store(self, url: str) -> Any | None:
         await self.open()
         assert self._session is not None
 
         try:
-            async with self._session.get(url) as response:
+            async with self._session.get(url, proxy=self._proxy) as response:
                 if response.status != 200:
                     logger.warning("API returned %s for %s", response.status, url)
                     return None
@@ -145,8 +162,6 @@ class ApiClient:
             payload = json.loads(path.read_text(encoding="utf-8"))
             timestamp = float(payload["timestamp"])
             data = payload["data"]
-            if not isinstance(data, dict):
-                return None
             return CacheEntry(timestamp=timestamp, data=data)
         except Exception as exc:
             logger.warning("Failed to read API cache file %s: %s", path, exc)
