@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,30 @@ class Database:
             "SELECT timezone FROM users WHERE user_id = ?",
             (user_id,),
         )
-        return row["timezone"] if row else "UTC"
+        tz_name = row["timezone"] if row else "UTC"
+        return self._sanitize_timezone(user_id, tz_name)
+
+    @staticmethod
+    def _is_supported_timezone(tz_name: str) -> bool:
+        if tz_name == "UTC":
+            return True
+        try:
+            ZoneInfo(tz_name)
+            return True
+        except (ZoneInfoNotFoundError, KeyError, ValueError, TypeError):
+            return False
+
+    def _sanitize_timezone(self, user_id: int, tz_name: str) -> str:
+        if self._is_supported_timezone(tz_name):
+            return tz_name
+
+        logger.warning(
+            "Invalid timezone '%s' for user %d. Fallback to UTC.",
+            tz_name,
+            user_id,
+        )
+        self.set_user_timezone(user_id, "UTC")
+        return "UTC"
 
     def set_user_timezone(self, user_id: int, timezone_name: str) -> None:
         self._run(
@@ -239,7 +263,13 @@ class Database:
         rows = self._fetchall(
             f"SELECT user_id, timezone FROM users WHERE notify_{kind} = 1"
         )
-        return [dict(row) for row in rows]
+        return [
+            {
+                "user_id": row["user_id"],
+                "timezone": self._sanitize_timezone(row["user_id"], row["timezone"]),
+            }
+            for row in rows
+        ]
 
     def get_subscribers_by_time(self, kind: str, minutes: int) -> list[dict]:
         if kind not in ALLOWED_NOTIFICATION_KINDS:
@@ -253,7 +283,13 @@ class Database:
             """,
             (minutes,),
         )
-        return [dict(row) for row in rows]
+        return [
+            {
+                "user_id": row["user_id"],
+                "timezone": self._sanitize_timezone(row["user_id"], row["timezone"]),
+            }
+            for row in rows
+        ]
 
     def has_sent_notification(
         self,

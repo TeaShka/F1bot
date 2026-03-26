@@ -99,9 +99,17 @@ async def cmd_next(message: Message, db: Database) -> None:
 
     track_photo = TRACK_MAPS.get(race["round"])
     if track_photo:
-        await message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await message.answer(text, parse_mode="HTML", reply_markup=kb)
+        try:
+            await message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
+            return
+        except Exception as exc:
+            logger.warning(
+                "Failed to send track photo for round %d in /next: %s. Fallback to text.",
+                race["round"],
+                exc,
+            )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 
 @router.message(Command("calendar"))

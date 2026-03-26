@@ -131,6 +131,38 @@ async def _replace_with_text(
     )
 
 
+async def _show_race_page(
+    callback: CallbackQuery,
+    *,
+    text: str,
+    reply_markup,
+    track_photo: str | None,
+    round_num: int,
+) -> None:
+    if track_photo:
+        try:
+            await callback.message.delete()
+            await callback.message.answer_photo(
+                photo=track_photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "Failed to send track photo for round %d: %s. Fallback to text.",
+                round_num,
+                exc,
+            )
+
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
+
+
 def _build_race_detail(race: dict, timezone_name: str) -> str:
     finished = is_race_finished(race)
     name_line = (
@@ -431,14 +463,13 @@ async def cb_next_race(callback: CallbackQuery, db: Database) -> None:
     kb = _race_menu_kb(race["round"], finished=is_race_finished(race))
 
     track_photo = TRACK_MAPS.get(race["round"])
-    if track_photo:
-        await callback.message.delete()
-        await callback.message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
-    elif callback.message.photo:
-        await callback.message.delete()
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await _show_race_page(
+        callback,
+        text=text,
+        reply_markup=kb,
+        track_photo=track_photo,
+        round_num=race["round"],
+    )
 
     await callback.answer()
 
@@ -467,14 +498,13 @@ async def cb_race_detail(callback: CallbackQuery, db: Database) -> None:
     kb = _race_menu_kb(round_num, finished=is_race_finished(race))
 
     track_photo = TRACK_MAPS.get(round_num)
-    if track_photo:
-        await callback.message.delete()
-        await callback.message.answer_photo(photo=track_photo, caption=text, parse_mode="HTML", reply_markup=kb)
-    elif callback.message.photo:
-        await callback.message.delete()
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+    await _show_race_page(
+        callback,
+        text=text,
+        reply_markup=kb,
+        track_photo=track_photo,
+        round_num=round_num,
+    )
 
     await callback.answer()
 
